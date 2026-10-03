@@ -1,0 +1,8 @@
+agent-governance-hooks
+Copyright 2026 csakegyruszki
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+The idea of escalating on observed failure patterns was inspired by
+Zenosyne-Technologies/agent-operating-kit (PolyForm Noncommercial 1.0.0). No code or text was
+copied; the escalation design here uses different states, thresholds and measurements.

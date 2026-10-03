@@ -1,0 +1,24 @@
+{
+  "name": "agent-governance-hooks",
+  "version": "0.3.0",
+  "description": "Governance hooks for coding agents: block destructive SQL/deletes and secret exfiltration, keep delegation scoped, inject critical lessons, gate 'done' on verified evidence, and keep always-loaded instructions within budget.",
+  "author": {
+    "name": "csakegyruszki",
+    "url": "https://github.com/csakegyruszki"
+  },
+  "homepage": "https://github.com/csakegyruszki/agent-governance-hooks",
+  "repository": "https://github.com/csakegyruszki/agent-governance-hooks",
+  "license": "Apache-2.0",
+  "keywords": [
+    "hooks",
+    "guardrails",
+    "governance",
+    "sql",
+    "deletion",
+    "secrets",
+    "subagents",
+    "delegation",
+    "tickets",
+    "instructions"
+  ]
+}
