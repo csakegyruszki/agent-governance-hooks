@@ -19,7 +19,7 @@
 // following statement). Defense in depth, not a security boundary.
 // Malformed input: fail open, or deny under GUARDRAIL_FAIL_CLOSED=1 (via lib/common run()).
 
-const { run, allow, deny, audit, auditStrict } = require('./lib/common');
+const { run, allow, deny, blockOrAsk, auditStrict } =require('./lib/common');
 const { scanDml, commentMarkerReason } = require('./sql-cli-guard');
 
 const KNOWN_SQL_TOOLS = new Set([
@@ -88,6 +88,6 @@ run('sql-guard', (payload) => {
     if (auditStrict('sql-guard', { event: 'bypass', reason: why, tool: toolName || '(none)', detected: uniq })) return allow();
     return deny('SQL-guard: bypass could not be logged (audit log not writable), so the call stays blocked.');
   }
-  audit('sql-guard', { event: 'deny', patterns: uniq, tool: toolName || '(none)' });
-  deny(`SQL-guard blocked destructive SQL: ${uniq.join(', ')}. If intentional, add a comment  -- guardrail:confirmed reason="<why, at least 8 chars>"  ${markerWhere} and retry.${namespaceNote}`);
+  blockOrAsk('sql-guard', { patterns: uniq, tool: toolName || '(none)' },
+    `SQL-guard blocked destructive SQL: ${uniq.join(', ')}. If intentional, add a comment  -- guardrail:confirmed reason="<why, at least 8 chars>"  ${markerWhere} and retry.${namespaceNote}`);
 });

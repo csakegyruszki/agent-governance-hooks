@@ -87,12 +87,22 @@ Plugin and hook formats follow the Claude Code documentation:
 | variable | effect | default |
 |---|---|---|
 | `GUARDRAIL_FAIL_CLOSED=1` | a hook that gets malformed input or crashes **denies** instead of allowing | unset: fail open; `lesson-inject` never blocks |
+| `GUARDRAIL_APPROVAL` | `deny` or `ask`. In `ask` the four blocking guards (`sql-guard`, `sql-cli-guard`, `deletion-guard`, `secret-guard`) return `permissionDecision: "ask"` for destructive or secret actions instead of `deny`, so Claude Code prompts the human. See [Approval mode](#approval-mode) | `deny` |
 | `GUARDRAIL_AUDIT_LOG` | JSONL file for bypasses, denies, errors and lesson injections. Only the last directory is created; its parent must exist | `~/.agent-governance-hooks/audit.jsonl` |
 | `GUARDRAIL_PROTECTED_DIRS` | directories where `deletion-guard` blocks every delete (path-separator list) | unset |
 | `GUARDRAIL_LESSONS_DIR` | lesson files for `lesson-inject` (see `examples/lessons/`) | unset: hook does nothing |
 | `GUARDRAIL_TICKETS_DIR` | ticket directory for `tools/tickets.py` and `completion-gate` | `<project>/tickets` |
 | `GUARDRAIL_PYTHON` | Python used by `completion-gate` | `python3`, then `python` on `PATH` |
 | `GUARDRAIL_INSTRUCTION_FILES` / `GUARDRAIL_INSTRUCTION_BUDGET` | which files count as always-loaded, and where their ceilings live | see [lint docs](docs/instruction-budget-lint.md) |
+
+**Approval mode.** With `GUARDRAIL_APPROVAL=ask` the human prompt is the primary approval path:
+the reason text is shown in the prompt with "Approve only if you intended this." and the audit log
+records `event: ask`. Malformed input, fail-closed errors, un-loggable bypasses, the evidence-directory
+block and `completion-gate` never become a prompt. Claude Code documents that in a `-p` run where no
+one can answer the prompt the call is denied. What each permission mode does with `ask` was NOT
+MEASURED on this release, because headless runs were not authenticated in the build environment; see
+[hardening notes](docs/hardening.md#approval-mode-guardrail_approvalask). Recommendation: interactive
+sessions `ask`; unattended or CI runs the default `deny`, or the audited escape hatch below.
 
 **Escape hatch.** A command or statement carrying `guardrail:confirmed reason="<at least 8
 characters>"` in a comment is let through; `delegation-guard` also accepts
@@ -131,7 +141,7 @@ npm test                                  # node --test
 python -m unittest tests/test_tickets.py  # tickets tool
 ```
 
-324 Node tests and 28 Python tests, run with Claude Code 2.1.287 and Node.js 22. Hook matchers and
+341 Node tests and 28 Python tests, run with Claude Code 2.1.288 and Node.js 22. Hook matchers and
 payload fields can change between Claude Code versions; re-run the tests after upgrading.
 
 - The SQL, deletion, secret and delegation tests are regression cases: concrete inputs that exposed

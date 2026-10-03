@@ -11,6 +11,9 @@
 //   is let through, and every use is appended to the audit log. A marker without a reason is
 //   ignored (the call is still denied). The model can type the marker too; the log is there so a
 //   human can review every bypass.
+// - Approval mode: GUARDRAIL_APPROVAL=deny (default) blocks destructive/secret actions;
+//   GUARDRAIL_APPROVAL=ask returns permissionDecision "ask" instead, so Claude Code prompts the
+//   human. The escape hatch above keeps working in both modes (for unattended runs).
 // - Audit log: JSONL at GUARDRAIL_AUDIT_LOG, default ~/.agent-governance-hooks/audit.jsonl. Logging never
 //   throws and never blocks.
 
@@ -33,6 +36,34 @@ function deny(reason) {
       permissionDecisionReason: reason,
     },
   }));
+}
+
+function ask(reason) {
+  process.stdout.write(JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'ask',
+      permissionDecisionReason: `${reason} Approve only if you intended this.`,
+    },
+  }));
+}
+
+// GUARDRAIL_APPROVAL=ask turns a guard's destructive/secret block into a permission prompt for the
+// human. Anything else (including unset) keeps the default: deny.
+function approvalMode() {
+  return process.env.GUARDRAIL_APPROVAL === 'ask' ? 'ask' : 'deny';
+}
+
+// Used by the four blocking guards for the "destructive or secret action" case ONLY. Not for
+// malformed input, fail-closed errors, un-loggable bypasses, the evidence-dir block or completion-gate.
+// Audits event 'ask' or 'deny', then emits the matching decision.
+function blockOrAsk(hook, fields, reason) {
+  if (approvalMode() === 'ask') {
+    audit(hook, { event: 'ask', ...fields });
+    return ask(reason);
+  }
+  audit(hook, { event: 'deny', ...fields });
+  return deny(reason);
 }
 
 function failClosed() {
@@ -118,4 +149,4 @@ function run(hook, handler) {
   });
 }
 
-module.exports = { allow, deny, failClosed, onError, confirmedReason, audit, auditStrict, auditPath, ensureLogDir, run, MARKER_RE };
+module.exports = { allow, deny, ask, approvalMode, blockOrAsk, failClosed, onError, confirmedReason, audit, auditStrict, auditPath, ensureLogDir, run, MARKER_RE };

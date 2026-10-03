@@ -16,7 +16,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { run, allow, deny, confirmedReason, audit, auditStrict } = require('./lib/common');
+const { run, allow, deny, blockOrAsk, confirmedReason, audit, auditStrict } = require('./lib/common');
 
 const MAX_FILE_BYTES = 1024 * 1024;
 const CLIENT_RE_SRC = '(?:psql|mysql|mariadb|duckdb|sqlite3)';
@@ -173,8 +173,7 @@ function main(hook = 'sql-cli-guard', clientSrc = CLIENT_RE_SRC) {
       if (auditStrict(hook, { event: 'bypass', reason: why, tool: 'Bash', detected: uniq })) return allow();
       return deny(`${hook}: bypass could not be logged (audit log not writable), so the call stays blocked.`);
     }
-    audit(hook, { event: 'deny', patterns: uniq });
-    deny(`${hook} blocked destructive SQL via a SQL CLI: ${uniq.join(', ')}. ` +
+    blockOrAsk(hook, { patterns: uniq }, `${hook} blocked destructive SQL via a SQL CLI: ${uniq.join(', ')}. ` +
       'Check the scope with a SELECT first and keep a backup. If intentional, add ' +
       'guardrail:confirmed reason="<why, at least 8 chars>" to the command and retry.');
   });

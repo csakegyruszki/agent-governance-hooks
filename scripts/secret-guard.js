@@ -217,8 +217,7 @@ function main(payload) {
     if (common.auditStrict(HOOK, { event: 'bypass', tool, cls: hit.cls, reason })) return common.allow();
     return common.deny(`${HOOK}: escape hatch present but the bypass could not be logged, so the call is blocked. Fix the audit log path (GUARDRAIL_AUDIT_LOG).`);
   }
-  common.audit(HOOK, { event: 'deny', tool, cls: hit.cls });
-  common.deny(
+  common.blockOrAsk(HOOK, { tool, cls: hit.cls },
     `${HOOK} blocked (${hit.cls}): ${hit.msg}. Secrets must not leave the machine. ` +
     'Keep them in an environment variable or a local secret store and reference them there. ' +
     'If this is a false positive, add guardrail:confirmed reason="<why, 8+ chars>" ' +

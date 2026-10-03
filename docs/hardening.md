@@ -16,7 +16,27 @@ These guards are defense in depth, not a security boundary. They are regex scann
 | Variable | Effect |
 |---|---|
 | `GUARDRAIL_FAIL_CLOSED=1` | A hook that cannot parse its input or throws denies the call instead of allowing it. `sql-cli-guard` also denies when a referenced SQL file cannot be read (missing, not a regular file, over 1 MB). |
+| `GUARDRAIL_APPROVAL` | `deny` (default) or `ask`. See below. |
 | `GUARDRAIL_AUDIT_LOG` | Path of the JSONL audit log. Default `~/.agent-governance-hooks/audit.jsonl`. |
+
+## Approval mode (`GUARDRAIL_APPROVAL=ask`)
+
+Default `deny` is unchanged. In `ask`, wherever `sql-guard`, `sql-cli-guard`, `deletion-guard` or `secret-guard` would deny a destructive or secret action, the hook returns `permissionDecision: "ask"` with the same reason plus "Approve only if you intended this.", and writes an audit row with `event: ask`. It does not apply to malformed input, fail-closed errors, a bypass that could not be logged, the evidence-directory block or `completion-gate`; those keep their fail-open / fail-closed / deny behaviour.
+
+The text escape hatch (marker with a reason) keeps working in both modes, for unattended runs, and every use is still audited. In `ask` mode the human prompt is the primary approval path.
+
+Documented by Anthropic ([hooks reference](https://code.claude.com/docs/en/hooks), PreToolUse decision control): `"ask"` prompts the user to confirm; the reason is shown in that prompt; in a `-p` run where no one can answer, Claude Code denies the call and Claude reads the reason in the tool result; a hook `"ask"` also forces a prompt in auto mode; deny and ask rules are still evaluated; precedence among hooks is `deny` > `defer` > `ask` > `allow`.
+
+### Measured behaviour of `ask` (Claude Code 2.1.288, headless `-p`)
+
+| permission mode | hook fired | command ran | permission_denials / result |
+|---|---|---|---|
+| default (`manual`), `acceptEdits`, `plan`, `auto`, `dontAsk`, `bypassPermissions` | NOT MEASURED | NOT MEASURED | NOT MEASURED |
+| control: hook returns `deny`, default mode | NOT MEASURED | NOT MEASURED | NOT MEASURED |
+
+Why: `claude -p` in the build environment returned "Failed to authenticate: OAuth session expired and could not be refreshed" (`claude auth status`: not logged in) before any tool call, in two attempts, so no mode was exercised. The probe (a PreToolUse hook on Bash that returns `ask` for a marker string and logs each call) is straightforward to rerun after `claude auth login`. Interactive UI behaviour (what the prompt looks like, whether approving runs the command) is NOT MEASURED either; check it once by hand before relying on `ask`.
+
+Recommendation: interactive sessions `ask`; unattended or CI runs `deny` (default) or the audited escape hatch.
 
 ## Marker syntax
 

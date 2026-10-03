@@ -243,8 +243,7 @@ function main(payload) {
     }
     return common.deny(`${HOOK}: escape hatch present but the bypass could not be logged, so the call is blocked. Fix the audit log path (GUARDRAIL_AUDIT_LOG).`);
   }
-  common.audit(HOOK, { event: 'deny', cls: hit.cls, command: cmd.slice(0, 200) });
-  common.deny(
+  common.blockOrAsk(HOOK, { cls: hit.cls, command: cmd.slice(0, 200) },
     `${HOOK} blocked (${hit.cls}): ${hit.detail}. ` +
     'Move to the trash instead of deleting permanently (trash <path>, gio trash <path>, or in ' +
     "PowerShell [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile('<path>','OnlyErrorDialogs','SendToRecycleBin'); " +
