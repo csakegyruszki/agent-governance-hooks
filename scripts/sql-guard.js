@@ -19,7 +19,7 @@
 // following statement). Defense in depth, not a security boundary.
 // Malformed input: fail open, or deny under GUARDRAIL_FAIL_CLOSED=1 (via lib/common run()).
 
-const { run, allow, deny, blockOrAsk, auditStrict } =require('./lib/common');
+const { run, allow, deny, blockOrAsk, auditStrict } = require('./lib/common');
 const { scanDml, commentMarkerReason } = require('./sql-cli-guard');
 
 const KNOWN_SQL_TOOLS = new Set([

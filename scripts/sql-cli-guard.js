@@ -161,17 +161,23 @@ function main(hook = 'sql-cli-guard', clientSrc = CLIENT_RE_SRC) {
     for (const f of unreadable) audit(hook, { event: 'file-unreadable', file: f.slice(0, 200) });
 
     const reasons = [];
+    let unreadableDeny = null;
     for (const view of [toNorm(text), toNorm(stripSqlComments(text))]) scanCli(view, reasons);
     if (unreadable.length && process.env.GUARDRAIL_FAIL_CLOSED === '1') {
-      reasons.push(`unreadable SQL file (${unreadable.join(', ')}) under GUARDRAIL_FAIL_CLOSED=1`);
+      unreadableDeny = `unreadable SQL file (${unreadable.join(', ')}) under GUARDRAIL_FAIL_CLOSED=1`;
     }
     const uniq = [...new Set(reasons)];
-    if (uniq.length === 0) return allow();
+    if (uniq.length === 0 && !unreadableDeny) return allow();
 
     const why = commentMarkerReason(text);
     if (why) {
       if (auditStrict(hook, { event: 'bypass', reason: why, tool: 'Bash', detected: uniq })) return allow();
       return deny(`${hook}: bypass could not be logged (audit log not writable), so the call stays blocked.`);
+    }
+    if (unreadableDeny) {
+      // Fail-closed denial is never turned into an approval prompt, in either mode.
+      audit(hook, { event: 'deny', patterns: [...uniq, unreadableDeny] });
+      return deny(`${hook}: ${unreadableDeny}. Make the file readable or unset the variable.`);
     }
     blockOrAsk(hook, { patterns: uniq }, `${hook} blocked destructive SQL via a SQL CLI: ${uniq.join(', ')}. ` +
       'Check the scope with a SELECT first and keep a backup. If intentional, add ' +

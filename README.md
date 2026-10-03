@@ -87,9 +87,9 @@ Plugin and hook formats follow the Claude Code documentation:
 | variable | effect | default |
 |---|---|---|
 | `GUARDRAIL_FAIL_CLOSED=1` | a hook that gets malformed input or crashes **denies** instead of allowing | unset: fail open; `lesson-inject` never blocks |
-| `GUARDRAIL_APPROVAL` | `deny` or `ask`. In `ask` the four blocking guards (`sql-guard`, `sql-cli-guard`, `deletion-guard`, `secret-guard`) return `permissionDecision: "ask"` for destructive or secret actions instead of `deny`, so Claude Code prompts the human. See [Approval mode](#approval-mode) | `deny` |
+| `GUARDRAIL_APPROVAL` | `deny` or `ask`. In `ask` the four blocking guards (`sql-guard`, `sql-cli-guard`, `deletion-guard`, `secret-guard`) return `permissionDecision: "ask"` for destructive or secret actions instead of `deny`, so Claude Code prompts the human. An `ask` can also be answered without a human by a PermissionRequest hook, `--permission-prompt-tool` or an SDK `canUseTool` host (whichever decides first applies; see the [hooks reference](https://code.claude.com/docs/en/hooks)); keep `deny` if you run one. See [Approval mode](#approval-mode) | `deny` |
 | `GUARDRAIL_AUDIT_LOG` | JSONL file for bypasses, denies, errors and lesson injections. Only the last directory is created; its parent must exist | `~/.agent-governance-hooks/audit.jsonl` |
-| `GUARDRAIL_PROTECTED_DIRS` | directories where `deletion-guard` blocks every delete (path-separator list) | unset |
+| `GUARDRAIL_PROTECTED_DIRS` | directories where `deletion-guard` blocks every delete (path-separator list) (asks under `GUARDRAIL_APPROVAL=ask`) | unset |
 | `GUARDRAIL_LESSONS_DIR` | lesson files for `lesson-inject` (see `examples/lessons/`) | unset: hook does nothing |
 | `GUARDRAIL_TICKETS_DIR` | ticket directory for `tools/tickets.py` and `completion-gate` | `<project>/tickets` |
 | `GUARDRAIL_PYTHON` | Python used by `completion-gate` | `python3`, then `python` on `PATH` |
@@ -141,7 +141,7 @@ npm test                                  # node --test
 python -m unittest tests/test_tickets.py  # tickets tool
 ```
 
-341 Node tests and 28 Python tests, run with Claude Code 2.1.288 and Node.js 22. Hook matchers and
+345 Node tests and 28 Python tests, run with Claude Code 2.1.288 and Node.js 22. Hook matchers and
 payload fields can change between Claude Code versions; re-run the tests after upgrading.
 
 - The SQL, deletion, secret and delegation tests are regression cases: concrete inputs that exposed

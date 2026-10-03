@@ -229,7 +229,9 @@ function analyze(cmd, cwd0) {
 function main(payload) {
   const tool = payload.tool_name;
   if (tool && !SHELL_TOOLS.has(tool)) return common.allow();
-  const cmd = String((payload.tool_input || {}).command || '');
+  const rawCmd = (payload.tool_input || {}).command;
+  if (rawCmd != null && typeof rawCmd !== 'string') throw new Error('tool_input.command is not a string');
+  const cmd = String(rawCmd || '');
   if (!cmd.trim()) return common.allow();
 
   const cwd = String(payload.cwd || process.cwd());

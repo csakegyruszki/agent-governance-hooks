@@ -23,11 +23,11 @@ These guards are defense in depth, not a security boundary. They are regex scann
 
 Default `deny` is unchanged. In `ask`, wherever `sql-guard`, `sql-cli-guard`, `deletion-guard` or `secret-guard` would deny a destructive or secret action, the hook returns `permissionDecision: "ask"` with the same reason plus "Approve only if you intended this.", and writes an audit row with `event: ask`. It does not apply to malformed input, fail-closed errors, a bypass that could not be logged, the evidence-directory block or `completion-gate`; those keep their fail-open / fail-closed / deny behaviour.
 
-The text escape hatch (marker with a reason) keeps working in both modes, for unattended runs, and every use is still audited. In `ask` mode the human prompt is the primary approval path.
+The text escape hatch (marker with a reason) keeps working in both modes, for unattended runs, and every use is still audited. In `ask` mode the human prompt is the primary approval path. An `ask` can also be answered without a human by a PermissionRequest hook, `--permission-prompt-tool` or an SDK `canUseTool` host (whichever decides first applies; see the [hooks reference](https://code.claude.com/docs/en/hooks)); keep `deny` if you run one.
 
 Documented by Anthropic ([hooks reference](https://code.claude.com/docs/en/hooks), PreToolUse decision control): `"ask"` prompts the user to confirm; the reason is shown in that prompt; in a `-p` run where no one can answer, Claude Code denies the call and Claude reads the reason in the tool result; a hook `"ask"` also forces a prompt in auto mode; deny and ask rules are still evaluated; precedence among hooks is `deny` > `defer` > `ask` > `allow`.
 
-### Measured behaviour of `ask` (Claude Code 2.1.288, headless `-p`)
+### Behaviour of `ask` per permission mode (NOT MEASURED on Claude Code 2.1.288)
 
 | permission mode | hook fired | command ran | permission_denials / result |
 |---|---|---|---|

@@ -78,6 +78,14 @@ function findSecretFile(unit) {
   return null;
 }
 
+// Category of a sensitive file, so reasons never echo the name or path.
+function fileCategory(f) {
+  const b = String(f).replace(/^.*[\/]/, '');
+  if (/\.env(?:\.|$)/i.test(b)) return 'env file';
+  if (/\.pem$|\.key$|^id_/i.test(b)) return 'private key file';
+  return 'credentials file';
+}
+
 function strings(v, out = []) {
   if (v == null) return out;
   if (typeof v === 'string') out.push(v);
@@ -163,11 +171,11 @@ function analyzeShell(cmd) {
       const tok = findToken(unit, { generic: true, auth: true });
       if (tok) return { cls: 'network-secret', msg: `network command carries a ${tok.desc}` };
       const f = findSecretFile(unit);
-      if (f) return { cls: 'network-secret-file', msg: `network command reads the secret file "${f}"` };
+      if (f) return { cls: 'network-secret-file', msg: `network command reads a ${fileCategory(f)}` };
     }
     if (isGit && /\s(?:add|stage|commit)(?=\s|$)/i.test(unit)) {
       const f = findSecretFile(unit);
-      if (f) return { cls: 'git-secret-file', msg: `git add/commit names the secret file "${f}"` };
+      if (f) return { cls: 'git-secret-file', msg: `git add/commit names a ${fileCategory(f)}` };
       if (/\scommit(?=\s|$)/i.test(unit)) {
         const tok = findToken(unit, { generic: false });
         if (tok) return { cls: 'git-commit-token', msg: `git commit carries a ${tok.desc}` };
@@ -199,6 +207,9 @@ function main(payload) {
   const tool = String(payload.tool_name || '');
   const input = payload.tool_input || {};
   if (LOCAL_TOOLS.has(tool)) return common.allow();
+  if ((SHELL_TOOLS.has(tool) || !tool) && input.command != null && typeof input.command !== 'string') {
+    throw new Error('tool_input.command is not a string');
+  }
 
   let hit;
   let text;
