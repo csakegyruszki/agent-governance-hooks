@@ -27,14 +27,32 @@ The text escape hatch (marker with a reason) keeps working in both modes, for un
 
 Documented by Anthropic ([hooks reference](https://code.claude.com/docs/en/hooks), PreToolUse decision control): `"ask"` prompts the user to confirm; the reason is shown in that prompt; in a `-p` run where no one can answer, Claude Code denies the call and Claude reads the reason in the tool result; a hook `"ask"` also forces a prompt in auto mode; deny and ask rules are still evaluated; precedence among hooks is `deny` > `defer` > `ask` > `allow`.
 
-### Behaviour of `ask` per permission mode (NOT MEASURED on Claude Code 2.1.288)
+### Measured behaviour of `ask` per permission mode (Claude Code 2.1.288, headless `-p`)
 
-| permission mode | hook fired | command ran | permission_denials / result |
+Measured 2026-10-04 with a probe project: one PreToolUse hook on `Bash` that returns the decision
+under test for a marker command (`echo <marker> > probe-ran.txt`) and logs every call; one
+`claude -p ... --permission-mode <mode> --model haiku --max-turns 3 --output-format json` run per
+cell. "Ran" means the file was actually created; denials are `permission_denials` in the JSON.
+
+| permission mode | no hook decision (baseline) | hook returns `ask` | hook returns `deny` |
 |---|---|---|---|
-| default (`manual`), `acceptEdits`, `plan`, `auto`, `dontAsk`, `bypassPermissions` | NOT MEASURED | NOT MEASURED | NOT MEASURED |
-| control: hook returns `deny`, default mode | NOT MEASURED | NOT MEASURED | NOT MEASURED |
+| `manual` (default) | ran | not run, 1 denial | not run, 1 denial |
+| `acceptEdits` | ran | not run, 1 denial | not run, 1 denial |
+| `auto` | ran | not run, 1 denial | not run, 1 denial |
+| `dontAsk` | ran | not run, 1 denial | not run, 1 denial |
+| `bypassPermissions` | ran | not run, 1 denial | not run, 1 denial |
+| `plan` | model did not call Bash (hook never fired) | same | same |
 
-Why: `claude -p` in the build environment returned "Failed to authenticate: OAuth session expired and could not be refreshed" (`claude auth status`: not logged in) before any tool call, in two attempts, so no mode was exercised. The probe (a PreToolUse hook on Bash that returns `ask` for a marker string and logs each call) is straightforward to rerun after `claude auth login`. Interactive UI behaviour (what the prompt looks like, whether approving runs the command) is NOT MEASURED either; check it once by hand before relying on `ask`.
+Reading it:
+- Headless, with nobody to answer, `ask` behaves as `deny` in every mode, including
+  `bypassPermissions`, matching the [hooks reference](https://code.claude.com/docs/en/hooks).
+- The baseline "ran" rows depend on the permission rules of the machine the probe ran on; the
+  point of the table is the difference between the baseline and the `ask`/`deny` columns.
+- In the `auto` and `dontAsk` `ask` runs the model's final message claimed the command had run
+  successfully although it had not. Judge outcomes by side effects or evidence files, not by the
+  agent's report; this is what `completion-gate` is for.
+- Interactive UI behaviour (the prompt itself, and that approving it runs the command) is not
+  covered by this headless measurement; check it once by hand before relying on `ask`.
 
 Recommendation: interactive sessions `ask`; unattended or CI runs `deny` (default) or the audited escape hatch.
 

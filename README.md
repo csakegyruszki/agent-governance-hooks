@@ -99,9 +99,10 @@ Plugin and hook formats follow the Claude Code documentation:
 the reason text is shown in the prompt with "Approve only if you intended this." and the audit log
 records `event: ask`. Malformed input, fail-closed errors, un-loggable bypasses, the evidence-directory
 block and `completion-gate` never become a prompt. Claude Code documents that in a `-p` run where no
-one can answer the prompt the call is denied. What each permission mode does with `ask` was NOT
-MEASURED on this release, because headless runs were not authenticated in the build environment; see
-[hardening notes](docs/hardening.md#approval-mode-guardrail_approvalask). Recommendation: interactive
+one can answer the prompt the call is denied. Measured on Claude Code 2.1.288 (headless): `ask`
+blocked the command in every permission mode, including `bypassPermissions`
+([measurement table](docs/hardening.md#measured-behaviour-of-ask-per-permission-mode-claude-code-21288-headless--p));
+the interactive prompt itself was not part of that measurement. Recommendation: interactive
 sessions `ask`; unattended or CI runs the default `deny`, or the audited escape hatch below.
 
 **Escape hatch.** A command or statement carrying `guardrail:confirmed reason="<at least 8
