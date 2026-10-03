@@ -84,6 +84,27 @@ function buildText(lessons) {
   return text;
 }
 
+// Subagents often return their final report through a SubagentHandback tool call, in which case
+// last_assistant_message is empty. Read the `message` of the last such call from the subagent
+// transcript (last 200 lines). Any read/parse problem yields '' (logged as not attested).
+function lastHandback(transcriptPath) {
+  try {
+    if (!transcriptPath || !fs.existsSync(transcriptPath)) return '';
+    const lines = fs.readFileSync(transcriptPath, 'utf8').trim().split('\n');
+    for (let i = lines.length - 1; i >= 0 && i >= lines.length - 200; i--) {
+      let r;
+      try { r = JSON.parse(lines[i]); } catch (_) { continue; }
+      const content = r && r.message && Array.isArray(r.message.content) ? r.message.content : [];
+      for (const c of content) {
+        if (c && c.type === 'tool_use' && c.name === 'SubagentHandback' && c.input) {
+          return String(c.input.message || '');
+        }
+      }
+    }
+  } catch (_) { /* fall through */ }
+  return '';
+}
+
 function wasInjected(agentId) {
   let data;
   try { data = fs.readFileSync(auditPath(), 'utf8'); } catch (_) { return null; }
@@ -117,11 +138,17 @@ function handler(p) {
   if (ev === 'SubagentStop') {
     const inj = p.agent_id ? wasInjected(p.agent_id) : null;
     if (inj) {
-      const m = /^\s*INFORMATION:(.*)$/m.exec(String(p.last_assistant_message || ''));
+      const RE = /^\s*INFORMATION:(.*)$/m;
+      let source = 'last_message';
+      let m = RE.exec(String(p.last_assistant_message || ''));
+      if (!m) { // reports delivered via a SubagentHandback tool call leave last_assistant_message empty
+        m = RE.exec(lastHandback(p.agent_transcript_path));
+        source = m ? 'handback' : 'none';
+      }
       const line = m ? m[1].toLowerCase() : '';
       const attested = !!m && (inj.lessons || []).some((n) => line.includes(String(n).toLowerCase()));
       const row = { event: 'attest', session_id: p.session_id, agent_id: p.agent_id,
-        agent_type: p.agent_type, attested };
+        agent_type: p.agent_type, attested, source };
       if (!attested) row.reason = m ? 'no matching lesson name' : 'no INFORMATION line';
       audit(HOOK, row);
     }

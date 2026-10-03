@@ -131,7 +131,7 @@ npm test                                  # node --test
 python -m unittest tests/test_tickets.py  # tickets tool
 ```
 
-323 Node tests and 28 Python tests, run with Claude Code 2.1.287 and Node.js 22. Hook matchers and
+324 Node tests and 28 Python tests, run with Claude Code 2.1.287 and Node.js 22. Hook matchers and
 payload fields can change between Claude Code versions; re-run the tests after upgrading.
 
 - The SQL, deletion, secret and delegation tests are regression cases: concrete inputs that exposed

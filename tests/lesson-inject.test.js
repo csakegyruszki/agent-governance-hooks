@@ -79,6 +79,23 @@ test('attest: true when final message has an INFORMATION: line', () => {
   assert.strictEqual(r.length, 1);
   assert.strictEqual(r[0].attested, true);
 });
+test('attest: reads the INFORMATION line from a SubagentHandback call when last_assistant_message is empty', () => {
+  // Regression: subagents that return their report via a SubagentHandback tool call were logged as
+  // not attested. The transcript line below follows the shape of a real Claude Code subagent
+  // transcript entry (assistant message with a tool_use block); its text is synthetic.
+  start('general-purpose', 'a-handback');
+  const transcript = path.join(TMP, 'agent-a-handback.jsonl');
+  fs.writeFileSync(transcript, [
+    JSON.stringify({ type: 'user', message: { role: 'user', content: 'task' } }),
+    JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'SubagentHandback',
+      input: { message: 'Findings ...\nINFORMATION: test-on-real-data = applied' } }] } }),
+  ].join('\n') + '\n');
+  run({ hook_event_name: 'SubagentStop', session_id: 's1', agent_id: 'a-handback', agent_type: 'general-purpose',
+    last_assistant_message: '', agent_transcript_path: transcript });
+  const r = rows().filter((x) => x.event === 'attest' && x.agent_id === 'a-handback').pop();
+  assert.strictEqual(r.attested, true);
+  assert.strictEqual(r.source, 'handback');
+});
 test('attest: false with reason when the line names no injected lesson', () => {
   start('general-purpose', 'a-attest-wrong');
   run({ hook_event_name: 'SubagentStop', agent_id: 'a-attest-wrong', agent_type: 'general-purpose',
