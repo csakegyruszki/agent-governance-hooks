@@ -38,17 +38,21 @@ cell. "Ran" means the file was actually created; denials are `permission_denials
 |---|---|---|---|
 | `manual` (default) | ran | not run, 1 denial | not run, 1 denial |
 | `acceptEdits` | ran | not run, 1 denial | not run, 1 denial |
-| `auto` | ran | not run, 1 denial | not run, 1 denial |
+| `auto` (requested; the hook saw `default`) | ran | not run, 1 denial | not run, 1 denial |
 | `dontAsk` | ran | not run, 1 denial | not run, 1 denial |
 | `bypassPermissions` | ran | not run, 1 denial | not run, 1 denial |
-| `plan` | model did not call Bash (hook never fired) | same | same |
+| `plan` | model did not call Bash (hook never fired) | not exercised | not exercised |
 
 Reading it:
-- Headless, with nobody to answer, `ask` behaves as `deny` in every mode, including
-  `bypassPermissions`, matching the [hooks reference](https://code.claude.com/docs/en/hooks).
+- Headless, with nobody to answer, `ask` behaved as `deny` in the five modes where the model
+  attempted Bash, including `bypassPermissions`, matching the
+  [hooks reference](https://code.claude.com/docs/en/hooks). In `plan` the model never attempted
+  Bash, so `ask` was not tested there.
+- With `--permission-mode auto` the hook input carried `permission_mode: "default"`, so the
+  `auto` row shows what happened to that run, not established auto-mode behaviour.
 - The baseline "ran" rows depend on the permission rules of the machine the probe ran on; the
   point of the table is the difference between the baseline and the `ask`/`deny` columns.
-- In the `auto` and `dontAsk` `ask` runs the model's final message claimed the command had run
+- In the `auto`-requested and `dontAsk` `ask` runs the model's final message claimed the command had run
   successfully although it had not. Judge outcomes by side effects or evidence files, not by the
   agent's report; this is what `completion-gate` is for.
 - Interactive UI behaviour (the prompt itself, and that approving it runs the command) is not
