@@ -1,4 +1,5 @@
 # agent-governance-hooks
+[![tests](https://github.com/csakegyruszki/agent-governance-hooks/actions/workflows/tests.yml/badge.svg)](https://github.com/csakegyruszki/agent-governance-hooks/actions/workflows/tests.yml)
 
 Governance hooks for Claude Code: safety, delegation discipline, knowledge transfer and completion integrity in one plugin.
 
