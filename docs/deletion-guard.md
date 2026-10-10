@@ -68,3 +68,7 @@ avoid a match, because stripping is how an attacker hides a command from a scann
 - Windows 8.3 short names and other path aliases that `path.posix.normalize` does not know.
 
 Treat this hook as a seat belt for honest mistakes, not as a sandbox.
+
+## Soft asks (permission prompt, never deny)
+
+robocopy /MIR or /PURGE and rsync --delete* with a destination inside GUARDRAIL_PROTECTED_DIRS, and python/node single-target delete calls on a quoted protected path, return ask in every approval mode. A protected source copied elsewhere, remote rsync destinations and temp-directory targets stay allowed. Obfuscation (concatenation, encoding, backticks, variables) is a known limit.

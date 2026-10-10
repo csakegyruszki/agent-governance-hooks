@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+Added
+
+- Soft classes that always answer with a permission prompt (ask, never deny, in every approval mode; new `softAsk` in `scripts/lib/common.js`, audited as event ask with soft: true):
+  - `deletion-guard`: robocopy /MIR or /PURGE and rsync --delete* (destination argument only), plus single-target script deletes (python os.remove/unlink/rmdir, Path(...).unlink/rmdir, node fs.unlink*) whose quoted path is inside GUARDRAIL_PROTECTED_DIRS. Outside the protected directories: allow as before. Temp placeholders ($env:TEMP, $env:TMP, ${env:TEMP}, %TEMP%, %TMP%, $TMPDIR) resolve to the temp directory even when unset.
+  - `secret-guard`: a shell command that reads a secret file (cat/type/gc/Get-Content/head/tail/less/cp/Copy-Item, python open(), node readFileSync) of .env and .env.* (not .example/.sample/.template/.dist), *credentials*.json, auth.json, id_rsa-style keys or any file under a .ssh directory (not *.pub, known_hosts, config).
+- README: documented limit that obfuscation is not caught; tests/soft-asks.test.js (77 tests, including known-limit cases asserted as allow).
+
+Changed
+
+- tests/secret-guard.test.js: cat .env and cp .env .env.bak moved out of the must-allow list (they now ask).
+
+Compatibility
+
+- Every call denied before is still denied with the same message. Newly asking: reading a secret file in the shell, mirror-delete sync into a protected directory, script deletes the old rule missed. No new deny.
+
 ## 0.5.0
 
 Added

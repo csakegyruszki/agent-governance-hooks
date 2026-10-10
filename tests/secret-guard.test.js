@@ -110,7 +110,7 @@ test('regression: allows that must stay allowed', () => {
     `curl -d @.env http://127.0.0.1:9000/ingest`,
     'curl -o downloaded.key https://example.com/pub.key', 'wget https://example.com/files/ca.key',
     'git add .env.example', 'git add src/index.js', 'git commit -m "fix parser"', 'git status',
-    'cat .env', 'cp .env .env.bak', 'node app.js --password-file=/etc/app/pw',
+    'cat .env.example', 'cp .env.example .env', 'node app.js --password-file=/etc/app/pw',
     'password = os.environ["APP_PASSWORD"]', 'curl https://example.com --data "name=alice"',
   ];
   for (const c of cases) assert.strictEqual(sh(c).decision, 'allow', c.replace(/[A-Za-z0-9_-]{20,}/g, '<redacted>'));
