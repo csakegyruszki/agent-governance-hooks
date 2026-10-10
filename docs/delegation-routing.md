@@ -1,8 +1,10 @@
 # Delegation routing (opt-in guidance, not enforcement)
 
 Nothing in this file is enforced by a hook. Copy the parts you want into your own `CLAUDE.md`
-or rules. The only related mechanism shipped here is `no-nested-agent`, which blocks
-subagent-spawned subagents.
+or rules. The related mechanisms shipped here are `no-nested-agent` (blocks subagent-spawned
+subagents), `delegation-guard` (scope and size limit), `return-contract` (typed reports),
+`turn-budget` (warns before a subagent's turn cap) and `delegation-log` (what each run cost and
+how it ended).
 
 ## Roles
 
