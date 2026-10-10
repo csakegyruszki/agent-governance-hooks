@@ -1,7 +1,7 @@
 {
   "name": "agent-governance-hooks",
   "version": "0.5.0",
-  "description": "Governance hooks for coding agents: block destructive SQL/deletes and secret exfiltration, keep delegation scoped, inject critical lessons, gate 'done' on verified evidence, and keep always-loaded instructions within budget.",
+  "description": "Governance hooks for coding agents: block destructive SQL/deletes and secret exfiltration, keep delegation scoped, optionally require typed subagent reports (return-contract), warn subagents before their turn cap, log delegations (turn-budget, delegation-log), inject critical lessons, gate 'done' on verified evidence, keep always-loaded instructions within budget, and (opt-in) nudge a project-memory update after many-file sessions (doc-touch-gate).",
   "author": {
     "name": "csakegyruszki",
     "url": "https://github.com/csakegyruszki"
