@@ -76,12 +76,12 @@ Plugin and hook formats follow the Claude Code documentation:
 | `secret-guard` | PreToolUse, every tool | API keys, tokens and private keys leaving the machine: in URLs, `curl`/`wget`/`Invoke-WebRequest` headers and bodies, secret files piped to network tools, `git add` of `.env`/`*.pem`/`id_rsa*`; reports only the kind of secret and its length; localhost targets allowed | [secret-guard](docs/secret-guard.md) |
 | `no-nested-agent` | PreToolUse, `Agent`/`Task` | a spawn raised from inside a subagent (payload carries `agent_id`); only the main context delegates | [hardening](docs/hardening.md) |
 | `delegation-guard` | PreToolUse, `Agent`/`Task` | a subagent prompt with no named scope (path, file, backticked identifier, URL) or no size limit (`max N lines`, JSON schema, ...) | [delegation-guard](docs/delegation-guard.md) |
-| `return-contract` | PreToolUse `Agent`/`Task` and the subagent hand-back tool; SubagentStop | **opt-in per delegation** (the prompt carries the line `RETURN: contract-v1`): appends the report schema to the prompt, then denies a hand-back, or blocks the subagent's stop, when the final report has no valid JSON block (status, summary, findings with evidence and basis, not-measured list). At most 2 denials per agent; after that the report is let through and logged | [contract](docs/contracts/subagent-return-v1.md) |
+| `return-contract` | PreToolUse `Agent`/`Task` and the subagent hand-back tool; SubagentStop | **opt-in per delegation** (the prompt carries the line `RETURN: contract-v1`): appends the report schema to the prompt, then denies a hand-back, or blocks the subagent's stop, when the final report has no valid JSON block (status, summary, findings with evidence and basis, not-measured list). At most 2 denials per agent; after that the report is let through and logged. On opted-in calls the injection returns `permissionDecision: "allow"` with `updatedInput`, which skips the permission prompt for that Agent call (see [return-contract](docs/return-contract.md)) | [contract](docs/contracts/subagent-return-v1.md) |
 | `turn-budget` | PreToolUse, any tool, inside subagents only | **advisory**: counts a subagent's tool calls and, 4 and 2 calls before the `maxTurns` in its agent file, injects "stop investigating and write your report". Subagents without a `maxTurns` line are ignored | [turn-budget](docs/turn-budget.md) |
 | `delegation-log` | PostToolUse `Agent`/`Task`; SubagentStop | **logs only**: a `launch` row (requested versus resolved model, contract requested) and a `stop` row (token usage and turns from the subagent transcript, `cap_hit`, contract outcome) | [delegation-log](docs/delegation-log.md) |
 | `lesson-inject` | SubagentStart / SubagentStop | injects up to 3 `severity: critical` lessons for the subagent's type from `GUARDRAIL_LESSONS_DIR`, then logs whether they were attested; never blocks | [lesson-inject](docs/lesson-inject.md) |
 | `completion-gate` | PreToolUse, `Write`/`Edit`/`MultiEdit` of a ticket file | setting `status: done` without valid evidence (see above); any write under `tickets/evidence/` | [tickets](docs/tickets.md) |
-| `doc-touch-gate` | PostToolUse `Write`/`Edit`/`MultiEdit`; Stop | **blocks once per project per session**: at least 3 distinct files edited in a project and its memory file (default `PROJECT_MEMORY.md`) not edited afterwards; asks for a memory-file update and one log line, or a one-sentence reason | [doc-touch-gate](docs/doc-touch-gate.md) |
+| `doc-touch-gate` | PostToolUse `Write`/`Edit`/`MultiEdit`; Stop | **opt-in** (inactive unless `GUARDRAIL_DOC_PROJECT_GLOBS` or `GUARDRAIL_DOC_ENABLED=1` is set); **blocks once per project per session**: at least 3 distinct files edited in a project and its memory file (default `PROJECT_MEMORY.md`) not edited afterwards; asks for a memory-file update and one log line, or a one-sentence reason | [doc-touch-gate](docs/doc-touch-gate.md) |
 | `instruction-budget-lint` | PostToolUse, `Write`/`Edit`/`MultiEdit` | **warns**: an always-loaded instruction file (CLAUDE.md, rules without `paths:`) grew past its ceiling, or a new rule has no `paths:`; sizes in Unicode code points | [lint](docs/instruction-budget-lint.md), [placement guide](docs/instruction-placement.md) |
 
 | tool | purpose |
@@ -102,7 +102,7 @@ Plugin and hook formats follow the Claude Code documentation:
 | `GUARDRAIL_LESSONS_DIR` | lesson files for `lesson-inject` (see `examples/lessons/`) | unset: hook does nothing |
 | `GUARDRAIL_TICKETS_DIR` | ticket directory for `tools/tickets.py` and `completion-gate` | `<project>/tickets` |
 | `GUARDRAIL_PYTHON` | Python used by `completion-gate` | `python3`, then `python` on `PATH` |
-| `GUARDRAIL_DOC_PROJECT_GLOBS`, `GUARDRAIL_DOC_MEMORY_FILE`, `GUARDRAIL_DOC_LOG_FILE`, `GUARDRAIL_DOC_MIN_FILES`, `GUARDRAIL_DOC_IGNORE_DIRS`, `GUARDRAIL_DOC_STATE_DIR` | `doc-touch-gate` (and the file names `project_init.py` writes): which directories are projects, the front-page and log file names, the threshold, directories to skip | see [doc-touch-gate](docs/doc-touch-gate.md) |
+| `GUARDRAIL_DOC_ENABLED`, `GUARDRAIL_DOC_PROJECT_GLOBS`, `GUARDRAIL_DOC_MEMORY_FILE`, `GUARDRAIL_DOC_LOG_FILE`, `GUARDRAIL_DOC_MIN_FILES`, `GUARDRAIL_DOC_IGNORE_DIRS`, `GUARDRAIL_DOC_STATE_DIR` | `doc-touch-gate` (and the file names `project_init.py` writes): whether it is on, which directories are projects, the front-page and log file names, the threshold (`0` = off), directories to skip | see [doc-touch-gate](docs/doc-touch-gate.md) |
 | `GUARDRAIL_INSTRUCTION_FILES` / `GUARDRAIL_INSTRUCTION_BUDGET` | which files count as always-loaded, and where their ceilings live | see [lint docs](docs/instruction-budget-lint.md) |
 
 **Approval mode.** With `GUARDRAIL_APPROVAL=ask` the human prompt is the primary approval path:
@@ -137,11 +137,11 @@ is the file that hurts most when it is stale. Two pieces keep it current:
   types and path-based type detection come from a JSON file. It never overwrites, and in a folder
   that already holds files it adds only the core files, so an empty evidence ledger cannot make an
   old project look "ledgered". Templates: [`templates/project-skeleton/`](templates/project-skeleton).
-- **`doc-touch-gate`** closes the loop at the end of a session: if at least 3 distinct files in a
+- **`doc-touch-gate`** (**opt-in**: inactive until you set `GUARDRAIL_DOC_PROJECT_GLOBS` or `GUARDRAIL_DOC_ENABLED=1`; `GUARDRAIL_DOC_MIN_FILES=0` switches it off) closes the loop at the end of a session: if at least 3 distinct files in a
   project were edited through `Write`/`Edit`/`MultiEdit` and its memory file was not edited
   afterwards, the Stop is blocked once with a request to update it (and add one log line, or give
   a one-sentence reason). The second Stop passes and is audited. Projects are defined by directory
-  patterns in `GUARDRAIL_DOC_PROJECT_GLOBS`; unset, the nearest ancestor with a `.git` entry or a
+  patterns in `GUARDRAIL_DOC_PROJECT_GLOBS`; with only `GUARDRAIL_DOC_ENABLED=1`, the nearest ancestor with a `.git` entry or a
   memory file is the project. It is advisory and fails open, and it cannot see edits made through
   the shell. Details: [doc-touch-gate](docs/doc-touch-gate.md).
 

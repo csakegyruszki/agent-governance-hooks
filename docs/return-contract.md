@@ -2,11 +2,15 @@
 
 Opt-in typed reports for delegated work. A subagent's free-text report cannot be checked mechanically; a fixed JSON block can. The spec, including the exact text injected into the prompt, is [contracts/subagent-return-v1.md](contracts/subagent-return-v1.md).
 
+## Permission behaviour
+
+On those opted-in Agent/Task calls the hook returns `permissionDecision: "allow"` together with `updatedInput`, so **the permission prompt for that Agent call is skipped** (deny and ask rules are still evaluated). The Claude Code [hooks reference](https://code.claude.com/docs/en/hooks) says `"allow"` "skips the permission prompt" and that `updatedInput` is to be combined "with `"allow"` to auto-approve, or `"ask"` to show the modified input to the user"; it does not state that `updatedInput` takes effect with no decision at all, so the hook keeps `allow`. Prompts without the `RETURN: contract-v1` line are untouched.
+
 One script, three registrations (`hooks/hooks.json`):
 
 | Event / matcher | What it does |
 |---|---|
-| PreToolUse `Agent\|Task` | The prompt has a line `RETURN: contract-v1` on its own: append the spec's INJECT block (once), after a sentinel comment that only this hook writes. A prompt that merely quotes the spec is never enforced. |
+| PreToolUse `Agent\|Task` | The prompt has a line `RETURN: contract-v1` on its own: append the spec's INJECT block (once), after a sentinel comment that only this hook writes. A prompt that merely quotes the spec is never enforced. The output is `permissionDecision: "allow"` plus `updatedInput`, so the user's permission prompt for that Agent call is skipped (see below). |
 | PreToolUse `SubagentHandback` | Contract requested and the report in `tool_input.message` is invalid, and fewer than 2 earlier denials for this `agent_id`: deny with the list of problems. |
 | SubagentStop | Contract requested, no accepted handback, `last_assistant_message` invalid, `stop_hook_active` false: block once with the problems. |
 
