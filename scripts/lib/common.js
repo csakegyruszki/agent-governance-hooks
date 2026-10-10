@@ -112,6 +112,20 @@ function ensureLogDir(p) {
   fs.mkdirSync(dir);
 }
 
+// Creates a state directory (and missing parents) without handing a recursive mkdir an uncreatable
+// parent: below a regular file such a mkdir can stall instead of failing. Walk up to the first
+// existing ancestor, require it to be a directory, then create.
+function ensureDir(dir) {
+  let probe = dir;
+  while (!fs.existsSync(probe)) {
+    const up = path.dirname(probe);
+    if (up === probe) break;
+    probe = up;
+  }
+  if (!fs.statSync(probe).isDirectory()) throw new Error('state directory parent is not a directory');
+  fs.mkdirSync(dir, { recursive: true });
+}
+
 function auditPath() {
   return process.env.GUARDRAIL_AUDIT_LOG ||
     path.join(os.homedir(), '.agent-governance-hooks', 'audit.jsonl');
@@ -149,4 +163,28 @@ function run(hook, handler) {
   });
 }
 
-module.exports = { allow, deny, ask, approvalMode, blockOrAsk, failClosed, onError, confirmedReason, audit, auditStrict, auditPath, ensureLogDir, run, MARKER_RE };
+// For advisory/observability hooks (turn-budget, delegation-log, return-contract): reads stdin, calls
+// handler(payload), and writes whatever it returns ('{}' if nothing). Malformed input or a thrown
+// error is audited as an 'error' event and answered with '{}' ALWAYS, also under
+// GUARDRAIL_FAIL_CLOSED=1: these hooks are not safety guards, and a broken advisory hook must never
+// block the session. (Same stance as lesson-inject.)
+function runAdvisory(hook, handler) {
+  let raw = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', (c) => (raw += c));
+  process.stdin.on('end', () => {
+    let out = null;
+    try {
+      const payload = JSON.parse(raw);
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        throw new Error('hook input is not a JSON object');
+      }
+      out = handler(payload);
+    } catch (e) {
+      audit(hook, { event: 'error', error: String((e && e.message) || e).slice(0, 200) });
+    }
+    process.stdout.write(out == null ? '{}' : (typeof out === 'string' ? out : JSON.stringify(out)));
+  });
+}
+
+module.exports = { allow, deny, ask, approvalMode, blockOrAsk, failClosed, onError, confirmedReason, audit, auditStrict, auditPath, ensureLogDir, ensureDir, run, runAdvisory, MARKER_RE };

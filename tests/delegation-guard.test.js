@@ -129,3 +129,30 @@ test('allow: a URL alone counts as scope', () => {
 test('malformed input fails open (synthetic)', () => {
   assert.deepStrictEqual(run('not json'), {});
 });
+
+// Opt-in return-contract advice (GUARDRAIL_RETURN_CONTRACT_ADVICE=1): additionalContext on an allowed
+// ad-hoc call without the RETURN line; silent otherwise. Advice never changes the decision.
+function advice(prompt, subagent_type = 'general-purpose', env = { GUARDRAIL_RETURN_CONTRACT_ADVICE: '1' }) {
+  const res = spawnSync(process.execPath, [HOOK], {
+    input: JSON.stringify({ tool_name: 'Agent', tool_input: { subagent_type, prompt } }),
+    encoding: 'utf8',
+    env: { ...process.env, GUARDRAIL_AUDIT_LOG: LOG, ...env },
+  });
+  assert.strictEqual(res.status, 0, res.stderr);
+  const o = JSON.parse(res.stdout);
+  return { decision: decision(o), text: (o.hookSpecificOutput || {}).additionalContext || '' };
+}
+test('advice: opt-in, ad-hoc call without the contract line gets a hint, and is still allowed', () => {
+  const a = advice(GOOD);
+  assert.strictEqual(a.decision, 'allow');
+  assert.match(a.text, /RETURN: contract-v1/);
+  assert.strictEqual(advice(GOOD, undefined).text.length > 0, true, 'no subagent_type counts as ad-hoc');
+});
+test('advice: silent when off (default), when the line is present, for registered agent types, and on deny', () => {
+  assert.strictEqual(advice(GOOD, 'general-purpose', {}).text, '');
+  assert.strictEqual(advice(GOOD + '\nRETURN: contract-v1').text, '');
+  assert.strictEqual(advice(GOOD, 'my-reviewer').text, '');
+  const d = advice(VAGUE);
+  assert.strictEqual(d.decision, 'deny');
+  assert.strictEqual(d.text, '');
+});

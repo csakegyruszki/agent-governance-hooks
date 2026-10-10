@@ -25,6 +25,11 @@ The generic `guardrail:confirmed reason="..."` marker also works. The marker mus
 |---|---|
 | `GUARDRAIL_AUDIT_LOG` | Audit JSONL path (default `~/.agent-governance-hooks/audit.jsonl`) |
 | `GUARDRAIL_FAIL_CLOSED=1` | A hook error denies instead of allowing |
+| `GUARDRAIL_RETURN_CONTRACT_ADVICE=1` | Opt-in advice, see below |
+
+## Return-contract advice (opt-in)
+
+With `GUARDRAIL_RETURN_CONTRACT_ADVICE=1`, an **allowed** ad-hoc call (no `subagent_type`, or `general-purpose`) whose prompt has no `RETURN: contract-v1` line gets a one-sentence `additionalContext` hint that the typed report exists (see [return-contract](return-contract.md)). Advice only: the decision is unchanged. Silent when the line is present, for named agent types, and on a deny.
 
 ## Payload fields used
 

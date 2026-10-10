@@ -19,6 +19,7 @@
 // guardrail:confirmed reason="...". Every bypass is written to the audit log.
 
 const { run, allow, deny, confirmedReason, audit, auditStrict } = require('./lib/common');
+const { CONTRACT_LINE_RE } = require('./lib/subagents');
 
 const HOOK = 'delegation-guard';
 // Markers count only at the START of a line (a marker quoted mid-sentence inside pasted material
@@ -52,6 +53,22 @@ const HAS_LIMIT = new RegExp([
   '\\byes\\s+or\\s+no\\b',
 ].join('|'), 'i');
 
+// Opt-in advice (GUARDRAIL_RETURN_CONTRACT_ADVICE=1): on an ad-hoc call (no subagent_type, or
+// general-purpose) whose prompt has no  RETURN: contract-v1  line, remind the caller that the typed
+// report exists. Advice only: the call is allowed either way. Pairs with scripts/return-contract.js.
+function allowWithAdvice(prompt, agent) {
+  const adhoc = !agent || agent === 'general-purpose';
+  if (process.env.GUARDRAIL_RETURN_CONTRACT_ADVICE !== '1' || !adhoc ||
+      CONTRACT_LINE_RE.test(prompt) || prompt.includes('return-contract-v1:injected')) return allow();
+  process.stdout.write(JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      additionalContext: 'Return contract: if this result feeds a decision, add the line "RETURN: contract-v1" ' +
+        'to the prompt for a typed, hook-checked report (docs/contracts/subagent-return-v1.md). Advice only.',
+    },
+  }));
+}
+
 function handler(p) {
   if (!/^(Agent|Task)$/i.test(String(p.tool_name || ''))) return allow();
   const ti = p.tool_input || {};
@@ -73,7 +90,7 @@ function handler(p) {
   const missing = [];
   if (!HAS_SCOPE.test(prompt)) missing.push('a NAMED SCOPE');
   if (!HAS_LIMIT.test(prompt)) missing.push('a SIZE LIMIT');
-  if (!missing.length) return allow();
+  if (!missing.length) return allowWithAdvice(prompt, agent);
 
   audit(HOOK, { event: 'deny', missing, agent });
   return deny(
