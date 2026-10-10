@@ -72,8 +72,8 @@ Plugin and hook formats follow the Claude Code documentation:
 |---|---|---|---|
 | `sql-guard` | PreToolUse, MCP tools ending in `execute_sql`, `apply_migration`, `deploy_edge_function` | `DROP TABLE/SCHEMA/DATABASE`, `TRUNCATE`, `ALTER TABLE ... DROP COLUMN`, `DELETE`/`UPDATE` without `WHERE` or with a tautological `WHERE` (`1=1`, `true`, `x=x`, `OR 1=1`, ...) | [hardening](docs/hardening.md) |
 | `sql-cli-guard` | PreToolUse, `Bash`/`PowerShell` commands that call `psql`, `mysql`, `mariadb`, `duckdb`, `sqlite3` | the same SQL patterns in the command, `-c`/`-e` args, heredocs and referenced `.sql` files (`<`, `-f`, `.read`, up to 1 MB) | [hardening](docs/hardening.md) |
-| `deletion-guard` | PreToolUse, `Bash`/`PowerShell` | recursive or forced deletes (`rm -r`/`-f`, `Remove-Item -Recurse`, `rmdir /s`, `find -delete`, `git clean -f`, `shutil.rmtree`, ...) and any delete inside `GUARDRAIL_PROTECTED_DIRS`; suggests the trash instead | [deletion-guard](docs/deletion-guard.md) |
-| `secret-guard` | PreToolUse, every tool | API keys, tokens and private keys leaving the machine: in URLs, `curl`/`wget`/`Invoke-WebRequest` headers and bodies, secret files piped to network tools, `git add` of `.env`/`*.pem`/`id_rsa*`; reports only the kind of secret and its length; localhost targets allowed | [secret-guard](docs/secret-guard.md) |
+| `deletion-guard` | PreToolUse, `Bash`/`PowerShell` | recursive or forced deletes (`rm -r`/`-f`, `Remove-Item -Recurse`, `rmdir /s`, `find -delete`, `git clean -f`, `shutil.rmtree`, ...) and any delete inside `GUARDRAIL_PROTECTED_DIRS`; suggests the trash instead. Asks (never denies) on `robocopy /MIR`/`/PURGE`, `rsync --delete*` and single-target script deletes aimed at a protected directory | [deletion-guard](docs/deletion-guard.md) |
+| `secret-guard` | PreToolUse, every tool | API keys, tokens and private keys leaving the machine: in URLs, `curl`/`wget`/`Invoke-WebRequest` headers and bodies, secret files piped to network tools, `git add` of `.env`/`*.pem`/`id_rsa*`; reports only the kind of secret and its length; localhost targets allowed. Asks (never denies) when a shell command reads a secret file (`cat .env`, `Get-Content ~/.ssh/id_x`, `cp`, python `open()`) | [secret-guard](docs/secret-guard.md) |
 | `no-nested-agent` | PreToolUse, `Agent`/`Task` | a spawn raised from inside a subagent (payload carries `agent_id`); only the main context delegates | [hardening](docs/hardening.md) |
 | `delegation-guard` | PreToolUse, `Agent`/`Task` | a subagent prompt with no named scope (path, file, backticked identifier, URL) or no size limit (`max N lines`, JSON schema, ...) | [delegation-guard](docs/delegation-guard.md) |
 | `return-contract` | PreToolUse `Agent`/`Task` and the subagent hand-back tool; SubagentStop | **opt-in per delegation** (the prompt carries the line `RETURN: contract-v1`): appends the report schema to the prompt, then denies a hand-back, or blocks the subagent's stop, when the final report has no valid JSON block (status, summary, findings with evidence and basis, not-measured list). At most 2 denials per agent; after that the report is let through and logged. On opted-in calls the injection returns `permissionDecision: "allow"` with `updatedInput`, which skips the permission prompt for that Agent call (see [return-contract](docs/return-contract.md)) | [contract](docs/contracts/subagent-return-v1.md) |
@@ -180,6 +180,15 @@ guards the scripts here are enough.
 - **Defense in depth, not a security boundary.** The guards are text scans, not shell or SQL
   parsers. Commands assembled through shell variables, `eval`, encoded text, scripts in other
   languages or other clients are outside their scope.
+- **Known limit: obfuscation is not caught.** String-matching guards stop accidents, not a determined
+  adversary. Concatenated or computed command names (`iex ('Remove'+'-Item ...')`, `& $name`), base64 or
+  `-EncodedCommand` payloads, backticks or quote-splitting inside a command name (``Re`move-Item``,
+  `r''m`), variables that build a path or file name, and `eval`/`$(...)` indirection are not
+  detected and are asserted as allowed in `tests/soft-asks.test.js` so any change is deliberate.
+- **Ask, not deny, for soft classes.** The newer detections (mirror-delete sync into a protected
+  directory, script deletes, shell reads of secret files) always return `permissionDecision: "ask"`,
+  also with `GUARDRAIL_APPROVAL=deny`, because the guards did not block them before. Where Claude Code
+  cannot prompt (unattended `-p` runs) an `ask` ends up denied; use the audited escape hatch there.
 - **Fail-open by default.** On malformed input or an internal error every hook allows. Set
   `GUARDRAIL_FAIL_CLOSED=1` to deny instead. If no Python is found, `completion-gate` also fails
   open with an audit event (denies under `GUARDRAIL_FAIL_CLOSED=1`).
@@ -204,7 +213,7 @@ npm test                                  # node --test
 python -m unittest tests/test_tickets.py tests/test_project_init.py  # tickets tool, project scaffolder
 ```
 
-396 Node tests and 39 Python tests, run with Claude Code 2.1.288 and Node.js 22. Hook matchers and
+477 Node tests and 39 Python tests, run with Claude Code 2.1.288 and Node.js 22. Hook matchers and
 payload fields can change between Claude Code versions; re-run the tests after upgrading.
 
 - The SQL, deletion, secret and delegation tests are regression cases: concrete inputs that exposed

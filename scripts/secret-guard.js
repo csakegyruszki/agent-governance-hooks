@@ -11,6 +11,10 @@
 //      (.env, *.pem, *.key, id_rsa*, *credentials*) through @file, --data-binary @, -T, < file,
 //      `cat file |` or $(cat file);
 //   3. git add / git commit naming a secret file, and git commit carrying a high-confidence token.
+// Asks (never denies, in both approval modes): Bash/PowerShell reading a secret file with a plain
+// read or copy command (cat/type/gc/Get-Content/head/tail/less/cp/Copy-Item, python open()/node
+// readFileSync) - .env and .env.* (not .example/.sample/.template/.dist), *credentials*.json,
+// auth.json, id_rsa-style keys and any file under a .ssh directory (not *.pub, known_hosts, config).
 // Allows local-only use: export X=..., writing a secret to a local file, Edit/Write/Read tools.
 // Messages never echo a secret: only the kind of secret and its length.
 //
@@ -185,6 +189,57 @@ function analyzeShell(cmd) {
   return null;
 }
 
+// ---- soft detection: reading a secret file in the shell (always "ask") -------------------------
+
+const SOFT_ENV_CRED = /(?:^|\/)(?:[^\s/]*\.env(?:\.(?!example$|sample$|template$|dist$)[\w.-]+)?|[^\s/]*credentials[^\s/]*\.json|auth\.json|id_(?:rsa|dsa|ecdsa|ed25519)(?!\.pub)[^\s/]*)$/i;
+const SSH_DIR_FILE = /(?:^|\/)\.ssh\/(?:[^\s/]+\/)*(?!known_hosts|config$)[^\s/]+$/i;
+const READ_VERB = /^(?:cat|tac|type|gc|get-content|more|less|head|tail|bat|strings|xxd|od|hexdump|cp|copy|cpi|copy-item)$/i;
+const COPY_VERB = /^(?:cp|copy|cpi|copy-item)$/i;
+const CONTENT_API = /\b(?:open|read_text|read_bytes|readFileSync|readFile)\s*\(/;
+
+// Category (never the name) when `word` is a secret file the soft rule covers, else null.
+function softSecretFile(word) {
+  const w = String(word).replace(/\\/g, '/').replace(/^[<@]+/, '');
+  if (!w || /\.pub$/i.test(w)) return null;
+  if (SSH_DIR_FILE.test(w)) return 'private key file';
+  if (SOFT_ENV_CRED.test(w)) return fileCategory(w);
+  return null;
+}
+
+function analyzeShellRead(cmd) {
+  for (const unit of cmd.split(/&&|\|\||;|\n|\r|\s&\s/)) {
+    const toks = tokenize(unit);
+    for (let i = 0; i < toks.length; i++) {
+      const base = toks[i].replace(/^.*[\\/]/, '').replace(/\.exe$/i, '');
+      if (!READ_VERB.test(base)) continue;
+      let args = [];
+      for (let j = i + 1; j < toks.length && toks[j] !== '|'; j++) args.push(toks[j]);
+      if (COPY_VERB.test(base)) {
+        const d = args.findIndex((a) => /^-Destination$/i.test(a));
+        if (d >= 0) args.splice(d, 2);
+        else {
+          const pos = args.map((a, k) => [a, k]).filter(([a]) => !a.startsWith('-'));
+          if (pos.length >= 2) args.splice(pos[pos.length - 1][1], 1); // the destination is a write
+        }
+      }
+      for (let k = 0; k < args.length; k++) {
+        const a = args[k];
+        if (/^\d?>>?$/.test(a)) { k++; continue; } // redirect target is a write
+        if (a.startsWith('>')) continue;
+        const cat = softSecretFile(a);
+        if (cat) return { cls: 'secret-file-read', soft: true, msg: `command reads a ${cat}` };
+      }
+    }
+    if (CONTENT_API.test(unit)) {
+      for (const w of unit.split(/[\s"'`()<>|;&=@,$]+/)) {
+        const cat = softSecretFile(w);
+        if (cat) return { cls: 'secret-file-read', soft: true, msg: `script reads a ${cat}` };
+      }
+    }
+  }
+  return null;
+}
+
 function analyzeOther(tool, input) {
   const all = strings(input);
   for (const s of all) {
@@ -216,7 +271,7 @@ function main(payload) {
   if (SHELL_TOOLS.has(tool) || (!tool && input.command)) {
     text = String(input.command || '');
     if (!text.trim()) return common.allow();
-    hit = analyzeShell(text);
+    hit = analyzeShell(text) || analyzeShellRead(text);
   } else {
     text = strings(input).join('\n');
     hit = analyzeOther(tool, input);
@@ -227,6 +282,12 @@ function main(payload) {
   if (reason) {
     if (common.auditStrict(HOOK, { event: 'bypass', tool, cls: hit.cls, reason })) return common.allow();
     return common.deny(`${HOOK}: escape hatch present but the bypass could not be logged, so the call is blocked. Fix the audit log path (GUARDRAIL_AUDIT_LOG).`);
+  }
+  if (hit.soft) {
+    return common.softAsk(HOOK, { tool, cls: hit.cls },
+      `${HOOK} asks (${hit.cls}): ${hit.msg}. Its content would enter the conversation. ` +
+      'Approve if you want the model to see it, or add guardrail:confirmed reason="<why, 8+ chars>" ' +
+      'to the call; the use is logged.');
   }
   common.blockOrAsk(HOOK, { tool, cls: hit.cls },
     `${HOOK} blocked (${hit.cls}): ${hit.msg}. Secrets must not leave the machine. ` +

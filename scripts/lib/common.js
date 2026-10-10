@@ -14,6 +14,9 @@
 // - Approval mode: GUARDRAIL_APPROVAL=deny (default) blocks destructive/secret actions;
 //   GUARDRAIL_APPROVAL=ask returns permissionDecision "ask" instead, so Claude Code prompts the
 //   human. The escape hatch above keeps working in both modes (for unattended runs).
+// - Soft classes: a few detections (a delete or mirror-sync into a protected directory through a
+//   language API or robocopy/rsync, a shell read of a secret file) always return "ask", never
+//   "deny", in both modes (softAsk). A hook with nothing to ask about stays silent.
 // - Audit log: JSONL at GUARDRAIL_AUDIT_LOG, default ~/.agent-governance-hooks/audit.jsonl. Logging never
 //   throws and never blocks.
 
@@ -64,6 +67,14 @@ function blockOrAsk(hook, fields, reason) {
   }
   audit(hook, { event: 'deny', ...fields });
   return deny(reason);
+}
+
+// For "probably an accident, but not provably one" detections (see deletion-guard / secret-guard
+// "soft" classes): ALWAYS a permission prompt, whatever GUARDRAIL_APPROVAL says. These classes were
+// not blocked before, so they must never become a hard deny; the human decides. Audited as event 'ask'.
+function softAsk(hook, fields, reason) {
+  audit(hook, { event: 'ask', soft: true, ...fields });
+  return ask(reason);
 }
 
 function failClosed() {
@@ -187,4 +198,4 @@ function runAdvisory(hook, handler) {
   });
 }
 
-module.exports = { allow, deny, ask, approvalMode, blockOrAsk, failClosed, onError, confirmedReason, audit, auditStrict, auditPath, ensureLogDir, ensureDir, run, runAdvisory, MARKER_RE };
+module.exports = { allow, deny, ask, approvalMode, blockOrAsk, softAsk, failClosed, onError, confirmedReason, audit, auditStrict, auditPath, ensureLogDir, ensureDir, run, runAdvisory, MARKER_RE };

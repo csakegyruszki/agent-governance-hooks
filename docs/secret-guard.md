@@ -63,3 +63,7 @@ The log records the tool, the class and the reason, never the secret value.
 - Other token formats not in the list (the generic pattern covers only `keyword=value` shapes).
 
 Treat this hook as a seat belt for honest mistakes, not as a data-loss-prevention system.
+
+## Soft asks (permission prompt, never deny)
+
+A Bash/PowerShell command that reads a secret file with cat/type/gc/Get-Content/head/tail/less/cp/Copy-Item, python open() or node readFileSync returns ask in every approval mode: .env and .env.* (not .example/.sample/.template/.dist), *credentials*.json, auth.json, id_rsa-style keys, any file under a .ssh directory (not *.pub, known_hosts, config). The reason names only the category. The Read tool is not routed through this hook. A variable-built file name is a known limit.

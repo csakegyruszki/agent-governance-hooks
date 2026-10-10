@@ -10,6 +10,11 @@
 //     .NET permanent deletes ([IO.File]::Delete, VisualBasic DeleteFile without SendToRecycleBin);
 //   * ANY delete (also a plain single-file rm/del/Remove-Item/unlink) whose target resolves inside
 //     a directory listed in GUARDRAIL_PROTECTED_DIRS (os.pathsep-separated).
+// Asks (never denies, in both approval modes), only when the target is inside GUARDRAIL_PROTECTED_DIRS:
+//   * a mirror-style sync into a protected directory: robocopy /MIR or /PURGE, rsync --delete*
+//     (destination argument only; a protected SOURCE copied elsewhere is fine);
+//   * a script one-liner (python os.remove/unlink/rmdir, Path(...).unlink/rmdir, node fs.unlink*) whose quoted
+//     path is inside a protected directory and that the hard script rule did not already deny.
 // Allows: moving to trash (trash, trash-put, gio trash, VisualBasic SendToRecycleBin) and every
 // non-recursive delete outside the protected directories.
 //
@@ -170,6 +175,85 @@ function scriptDelete(cmd, cwd, dirs) {
   return null;
 }
 
+// ---- soft detections (always "ask", protected directories only) -------------------------------
+
+// A temp-directory placeholder ($env:TEMP, ${env:TMP}, %TEMP%, $TMPDIR, ...) is resolved to the real
+// temp directory even when the variable is not set in the hook's environment; left unresolved it
+// would be read as a relative path and could land inside a protected cwd.
+const TEMP_PLACEHOLDER = /^(?:\$env:(TEMP|TMP)|\$\{env:(TEMP|TMP)\}|%(TEMP|TMP)%|\$\{?(TMPDIR)\}?)(?=$|[\\/])/i;
+function softForms(p, cwd) {
+  const m = TEMP_PLACEHOLDER.exec(p);
+  if (m) {
+    const name = (m[1] || m[2] || m[3] || m[4]).toUpperCase();
+    const root = (name === 'TMPDIR' ? process.env.TMPDIR : process.env[name]) || (name === 'TMPDIR' ? '/tmp' : os.tmpdir());
+    return forms(root + p.slice(m[0].length), cwd);
+  }
+  return forms(p, cwd);
+}
+
+const OPT_LIKE = /^\/[A-Za-z?]+(?::[^\\/]*)?$/; // robocopy switch: /MIR, /E, /R:3 (a lone /tmp looks the same; harmless)
+const ROBO_LIST_OPT = /^\/(?:XD|XF|IF|XJD|XJF)$/i;
+const RSYNC_VALUE_OPT = /^(?:-e|-f|--rsh|--exclude|--include|--exclude-from|--include-from|--filter|--files-from|--port|--bwlimit|--rsync-path|--log-file|--backup-dir|--temp-dir|--partial-dir|--compare-dest|--link-dest|--copy-dest|--timeout|--max-size|--min-size|--chmod|--chown|--password-file)$/;
+const isRemote = (t) => /^rsync:\/\//i.test(t) || (/^[^\\/\s]+:/.test(t) && !/^[A-Za-z]:[\\/]?/.test(t));
+
+// Destination argument of `robocopy src dst [files] [options]` when /MIR or /PURGE is present, else null.
+function robocopyDest(tokens) {
+  if (!tokens.some((t) => /^\/(?:MIR|PURGE)$/i.test(t))) return null;
+  const pos = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (ROBO_LIST_OPT.test(t)) { while (i + 1 < tokens.length && !OPT_LIKE.test(tokens[i + 1])) i++; continue; }
+    if (OPT_LIKE.test(t)) continue;
+    pos.push(t);
+  }
+  return pos.length >= 2 ? pos[1] : null;
+}
+
+// Destination (last positional) of an rsync call that has a --delete* option, else null (remote -> null).
+function rsyncDest(tokens) {
+  if (!tokens.some((t) => /^--(?:delete(?:-[a-z]+)?|del)$/i.test(t))) return null;
+  const pos = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (RSYNC_VALUE_OPT.test(t)) { i++; continue; }
+    if (t.startsWith('-')) continue;
+    pos.push(t);
+  }
+  if (pos.length < 2) return null;
+  const dst = pos[pos.length - 1];
+  return isRemote(dst) ? null : dst;
+}
+
+function softSegment(seg, cwd, dirs) {
+  const re = /(?<![\p{L}\p{N}_-])(robocopy|rsync)(?:\.exe)?(?=\s)/giu;
+  let m;
+  while ((m = re.exec(seg))) {
+    const tokens = seg.slice(re.lastIndex).split(/\s+/).filter(Boolean).map(unq);
+    const dst = m[1].toLowerCase() === 'robocopy' ? robocopyDest(tokens) : rsyncDest(tokens);
+    if (dst && insideAny(softForms(dst, cwd), dirs)) {
+      return { cls: 'mirror-sync-protected-dir', soft: true, detail: `${m[1].toLowerCase()} mirror/delete mode with a destination inside a protected directory` };
+    }
+  }
+  return null;
+}
+
+// Single-target delete calls in a script one-liner. The hard rule (scriptDelete) only looks at quoted
+// strings that are not nested inside another quote pair, so `python -c "...os.remove(r'<path>')"` slips
+// through it; here every single- and double-quoted literal is checked on its own.
+const SOFT_SCRIPT_CALL = /\bPath\s*\([^)]*\)\s*\.\s*rmdir\s*\(|\bos\s*\.\s*(?:remove|unlink|rmdir)\s*\(|\.unlink(?:Sync)?\s*\(|\bfs\s*\.\s*unlink(?:Sync)?\s*\(/i;
+function softScript(cmd, cwd, dirs) {
+  if (!SOFT_SCRIPT_CALL.test(cmd)) return null;
+  for (const re of [/'([^'\n]+)'/g, /"([^"\n]+)"/g]) {
+    let m;
+    while ((m = re.exec(cmd))) {
+      if (insideAny(softForms(m[1], cwd), dirs)) {
+        return { cls: 'script-delete-protected-dir', soft: true, detail: 'script one-liner deletes a path inside a protected directory' };
+      }
+    }
+  }
+  return null;
+}
+
 function analyze(cmd, cwd0) {
   const dirs = protectedDirs(cwd0);
   let cwd = normPath(cwd0, cwd0);
@@ -193,6 +277,7 @@ function analyze(cmd, cwd0) {
     return { cls: 'xargs-delete', detail: 'xargs feeding a delete command (targets unknown)' };
   }
 
+  let soft = dirs.length ? softScript(cmd, cwd, dirs) : null;
   for (const seg of cmd.split(SEGMENT_SPLIT)) {
     const cdm = /^\s*(?:cd|pushd|chdir|set-location|sl)\s+(?:\/d\s+)?(?:-\w+\s+)?(\S+)/i.exec(seg);
     if (cdm) cwd = normPath(unq(cdm[1]), cwd);
@@ -222,8 +307,9 @@ function analyze(cmd, cwd0) {
         }
       }
     }
+    if (!soft && dirs.length) soft = softSegment(seg, cwd, dirs);
   }
-  return null;
+  return soft; // a hard hit above always wins; a soft hit (or null) is all that is left
 }
 
 function main(payload) {
@@ -244,6 +330,11 @@ function main(payload) {
       return common.allow();
     }
     return common.deny(`${HOOK}: escape hatch present but the bypass could not be logged, so the call is blocked. Fix the audit log path (GUARDRAIL_AUDIT_LOG).`);
+  }
+  if (hit.soft) {
+    return common.softAsk(HOOK, { cls: hit.cls, command: cmd.slice(0, 200) },
+      `${HOOK} asks (${hit.cls}): ${hit.detail}. This can remove files the sync source does not have. ` +
+      'Check the destination, or add guardrail:confirmed reason="<why, at least 8 characters>" to the command.');
   }
   common.blockOrAsk(HOOK, { cls: hit.cls, command: cmd.slice(0, 200) },
     `${HOOK} blocked (${hit.cls}): ${hit.detail}. ` +
