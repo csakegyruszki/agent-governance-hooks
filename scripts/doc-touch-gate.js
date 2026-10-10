@@ -44,7 +44,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { audit } = require('./lib/common');
+const { audit, ensureDir } = require('./lib/common');
 
 const HOOK = 'doc-touch-gate';
 const EDIT_TOOLS = ['Write', 'Edit', 'MultiEdit'];
@@ -137,19 +137,6 @@ function isSubstantive(rel, cfg = loadConfig()) {
   if (base === cfg.memoryFile.toLowerCase() || base === cfg.logFile.toLowerCase()) return false;
   if (low.startsWith('archive/')) return false;
   return true;
-}
-
-// Creates the state directory without handing mkdir an uncreatable parent (a recursive mkdir on a
-// path below a regular file can stall; see the note in lib/common.js ensureLogDir).
-function ensureDir(dir) {
-  let probe = dir;
-  while (!fs.existsSync(probe)) {
-    const up = path.dirname(probe);
-    if (up === probe) break;
-    probe = up;
-  }
-  if (!fs.statSync(probe).isDirectory()) throw new Error('state directory parent is not a directory');
-  fs.mkdirSync(dir, { recursive: true });
 }
 
 function stateFile(cfg, session) {

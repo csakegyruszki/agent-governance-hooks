@@ -26,7 +26,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { runAdvisory } = require('./lib/common');
+const { runAdvisory, ensureDir } = require('./lib/common');
 const { maxTurnsFor } = require('./lib/subagents');
 
 const HOOK = 'turn-budget';
@@ -44,7 +44,7 @@ function handler(p) {
   const cap = maxTurnsFor(p.agent_type, p.cwd);
   if (!cap || cap < 1) return null;
   const dir = path.join(stateDir(), safe(p.session_id));
-  fs.mkdirSync(dir, { recursive: true });
+  ensureDir(dir);
   const f = path.join(dir, safe(p.agent_id) + '.count');
   fs.appendFileSync(f, '.');
   const left = cap - fs.statSync(f).size;

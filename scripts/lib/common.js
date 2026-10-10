@@ -112,6 +112,20 @@ function ensureLogDir(p) {
   fs.mkdirSync(dir);
 }
 
+// Creates a state directory (and missing parents) without handing a recursive mkdir an uncreatable
+// parent: below a regular file such a mkdir can stall instead of failing. Walk up to the first
+// existing ancestor, require it to be a directory, then create.
+function ensureDir(dir) {
+  let probe = dir;
+  while (!fs.existsSync(probe)) {
+    const up = path.dirname(probe);
+    if (up === probe) break;
+    probe = up;
+  }
+  if (!fs.statSync(probe).isDirectory()) throw new Error('state directory parent is not a directory');
+  fs.mkdirSync(dir, { recursive: true });
+}
+
 function auditPath() {
   return process.env.GUARDRAIL_AUDIT_LOG ||
     path.join(os.homedir(), '.agent-governance-hooks', 'audit.jsonl');
@@ -173,4 +187,4 @@ function runAdvisory(hook, handler) {
   });
 }
 
-module.exports = { allow, deny, ask, approvalMode, blockOrAsk, failClosed, onError, confirmedReason, audit, auditStrict, auditPath, ensureLogDir, run, runAdvisory, MARKER_RE };
+module.exports = { allow, deny, ask, approvalMode, blockOrAsk, failClosed, onError, confirmedReason, audit, auditStrict, auditPath, ensureLogDir, ensureDir, run, runAdvisory, MARKER_RE };
