@@ -2,6 +2,10 @@
 'use strict';
 // doc-touch-gate.js - PostToolUse (Write|Edit|MultiEdit) + Stop hook (dispatch on hook_event_name).
 //
+// OPT-IN: the hook is inactive (answers '{}' on every event, writes nothing) unless
+// GUARDRAIL_DOC_PROJECT_GLOBS is set or GUARDRAIL_DOC_ENABLED=1. GUARDRAIL_DOC_MIN_FILES=0 also
+// disables it.
+//
 // Why: a project's memory file (default PROJECT_MEMORY.md) is the front page the next session reads
 // first. Sessions that change many files and then stop without touching it leave the next session
 // with a stale page. This hook turns that into one nudge.
@@ -23,8 +27,8 @@
 // directory, so a file directly in `work/research/` is not mistaken for a project. An entry starting
 // with '!' excludes: a path below a matching directory is never a project.
 //   example:  work/research/*;work/cases/*/*;!work/cases/tools
-// Unset: the project root is the nearest ancestor directory that contains the memory file or a
-// `.git` entry.
+// Globs unset but GUARDRAIL_DOC_ENABLED=1: the project root is the nearest ancestor directory that
+// contains the memory file or a `.git` entry.
 //
 // Never applies to GUARDRAIL_DOC_IGNORE_DIRS (default: ~/.claude).
 //
@@ -35,8 +39,9 @@
 // Advisory: any error -> '{}' (audited when possible); it does not follow GUARDRAIL_FAIL_CLOSED,
 // because blocking every session stop on a hook bug would be worse than a missed nudge.
 //
-// Configuration (env): GUARDRAIL_DOC_PROJECT_GLOBS, GUARDRAIL_DOC_MEMORY_FILE (default
-// PROJECT_MEMORY.md), GUARDRAIL_DOC_LOG_FILE (default _LOG.md), GUARDRAIL_DOC_MIN_FILES (default 3),
+// Configuration (env): GUARDRAIL_DOC_ENABLED (=1 enables the .git/memory-file fallback),
+// GUARDRAIL_DOC_PROJECT_GLOBS, GUARDRAIL_DOC_MEMORY_FILE (default
+// PROJECT_MEMORY.md), GUARDRAIL_DOC_LOG_FILE (default _LOG.md), GUARDRAIL_DOC_MIN_FILES (default 3; 0 = disabled),
 // GUARDRAIL_DOC_IGNORE_DIRS, GUARDRAIL_DOC_STATE_DIR (default <GUARDRAIL_STATE_DIR or
 // ~/.agent-governance-hooks/state>/doc-touch),
 // GUARDRAIL_AUDIT_LOG.
@@ -67,6 +72,13 @@ function compileGlob(entry) {
   return new RegExp((anchored ? '^' : '(?:^|/)') + body + '(?=/)', 'i');
 }
 
+// Unset, empty or not a non-negative integer -> 3. An explicit 0 is kept: it disables the gate.
+function parseMinFiles(v) {
+  if (v === undefined || String(v).trim() === '') return 3;
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 0 ? n : 3;
+}
+
 function loadConfig(env = process.env) {
   const includes = [];
   const excludes = [];
@@ -76,10 +88,11 @@ function loadConfig(env = process.env) {
   }
   const ignore = splitList(env.GUARDRAIL_DOC_IGNORE_DIRS || path.join(os.homedir(), '.claude'))
     .map((d) => stripSlash(norm(d)).toLowerCase());
-  return {
+  const cfg = {
     memoryFile: env.GUARDRAIL_DOC_MEMORY_FILE || 'PROJECT_MEMORY.md',
     logFile: env.GUARDRAIL_DOC_LOG_FILE || '_LOG.md',
-    minFiles: Number(env.GUARDRAIL_DOC_MIN_FILES) || 3,
+    minFiles: parseMinFiles(env.GUARDRAIL_DOC_MIN_FILES),
+    enabled: false, // set below
     stateDir: env.GUARDRAIL_DOC_STATE_DIR ||
       path.join(env.GUARDRAIL_STATE_DIR || path.join(os.homedir(), '.agent-governance-hooks', 'state'), 'doc-touch'),
     includes,
@@ -87,6 +100,8 @@ function loadConfig(env = process.env) {
     hasGlobs: includes.length > 0,
     ignore,
   };
+  cfg.enabled = cfg.minFiles > 0 && (cfg.hasGlobs || env.GUARDRAIL_DOC_ENABLED === '1');
+  return cfg;
 }
 
 // Fallback when no globs are configured: nearest ancestor holding the memory file or a .git entry.
@@ -218,6 +233,7 @@ function handleStop(p, cfg) {
 }
 
 function handle(p, cfg = loadConfig()) {
+  if (!cfg.enabled) return '{}'; // opt-in: inactive, writes nothing
   const ev = p.hook_event_name;
   if (ev === 'PostToolUse') return handlePost(p, cfg);
   if (ev === 'Stop') return handleStop(p, cfg);

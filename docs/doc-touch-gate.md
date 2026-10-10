@@ -2,6 +2,10 @@
 
 PostToolUse (`Write|Edit|MultiEdit`) and Stop hook, one script (`scripts/doc-touch-gate.js`). It keeps a project's front page, by default `PROJECT_MEMORY.md`, from going stale: a session that changes several files in a project and then stops without touching that page is asked once to update it.
 
+## Opt-in
+
+The hook is **inactive by default**: it answers `{}` on every event and writes nothing (no state file, no audit row). It becomes active when `GUARDRAIL_DOC_PROJECT_GLOBS` is set, or when `GUARDRAIL_DOC_ENABLED=1` is set (which turns on the `.git` / memory-file ancestor fallback below). `GUARDRAIL_DOC_MIN_FILES=0` switches it off again.
+
 ## Behaviour
 
 - **PostToolUse**: when the edited file lies inside a project, it records `(session, project root, relative path)` in a small per-session state file. Only the three edit tools are seen.
@@ -29,16 +33,17 @@ Both slash styles are accepted. The edited file must lie *below* the matched dir
 GUARDRAIL_DOC_PROJECT_GLOBS="work/research/*;work/cases/*/*;work/code/*;!work/cases/tools"
 ```
 
-If the variable is unset, the project root is the nearest ancestor directory that contains the memory file or a `.git` entry.
+If the variable is unset and `GUARDRAIL_DOC_ENABLED=1`, the project root is the nearest ancestor directory that contains the memory file or a `.git` entry. With neither set the hook is off.
 
 ## Configuration
 
 | variable | effect | default |
 |---|---|---|
-| `GUARDRAIL_DOC_PROJECT_GLOBS` | project root patterns (above) | unset: nearest ancestor with the memory file or `.git` |
+| `GUARDRAIL_DOC_ENABLED` | `1` activates the hook without globs, using the nearest ancestor with the memory file or `.git` as project root | unset: hook is off unless globs are set |
+| `GUARDRAIL_DOC_PROJECT_GLOBS` | project root patterns (above); setting it activates the hook | unset |
 | `GUARDRAIL_DOC_MEMORY_FILE` | file name of the project front page | `PROJECT_MEMORY.md` |
 | `GUARDRAIL_DOC_LOG_FILE` | file name of the append-only log | `_LOG.md` |
-| `GUARDRAIL_DOC_MIN_FILES` | distinct substantive files that trigger the block | `3` |
+| `GUARDRAIL_DOC_MIN_FILES` | distinct substantive files that trigger the block; `0` disables the hook; an empty or invalid value means `3` | `3` |
 | `GUARDRAIL_DOC_IGNORE_DIRS` | directories (path-delimiter list) the gate never applies to | `~/.claude` |
 | `GUARDRAIL_DOC_STATE_DIR` | per-session state | `<GUARDRAIL_STATE_DIR or ~/.agent-governance-hooks/state>/doc-touch` |
 | `GUARDRAIL_AUDIT_LOG` | audit JSONL | `~/.agent-governance-hooks/audit.jsonl` |

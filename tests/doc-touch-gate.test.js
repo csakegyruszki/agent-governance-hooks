@@ -182,8 +182,8 @@ test('two projects in one session: one combined block, each blocked only once', 
   assert.strictEqual(stop(s), '{}');
 });
 
-test('no globs configured: project root is the nearest ancestor with .git or the memory file', () => {
-  const env = { GUARDRAIL_DOC_PROJECT_GLOBS: '' };
+test('GUARDRAIL_DOC_ENABLED=1 without globs: project root is the nearest ancestor with .git or the memory file', () => {
+  const env = { GUARDRAIL_DOC_PROJECT_GLOBS: '', GUARDRAIL_DOC_ENABLED: '1' };
   const repo = TMP + '/auto/repo-a';
   fs.mkdirSync(repo + '/.git', { recursive: true });
   const memProj = TMP + '/auto/mem-b';
@@ -210,4 +210,40 @@ test('advisory fail-open: garbage stdin, unrelated event, unusable state dir, ev
   const env = { GUARDRAIL_DOC_STATE_DIR: blocker + '/nope', ...closed };
   assert.strictEqual(post('bad-state', P.code + '/a.md', 'Edit', env), '{}');
   assert.ok(rows().some((r) => r.hook === 'doc-touch-gate' && r.event === 'error'));
+});
+
+test('default off: no globs and no GUARDRAIL_DOC_ENABLED -> never blocks, records nothing, even in a .git project', () => {
+  const env = { GUARDRAIL_DOC_PROJECT_GLOBS: '' };
+  const repo = TMP + '/off/repo-c';
+  fs.mkdirSync(repo + '/.git', { recursive: true });
+  const s = newSession();
+  for (const f of files(repo, ['a.js', 'b.js', 'c.js', 'd.js'])) assert.strictEqual(post(s, f, 'Edit', env), '{}');
+  assert.strictEqual(stop(s, false, env), '{}');
+  assert.ok(!fs.existsSync(STATE + '/' + s + '.json'));
+  const cfgOff = gate.loadConfig({ ...env, GUARDRAIL_DOC_ENABLED: '0' });
+  assert.strictEqual(cfgOff.enabled, false);
+});
+test('enabled via GUARDRAIL_DOC_ENABLED=1 (no globs): blocks once, then passes', () => {
+  const env = { GUARDRAIL_DOC_PROJECT_GLOBS: '', GUARDRAIL_DOC_ENABLED: '1' };
+  const repo = TMP + '/on/repo-d';
+  fs.mkdirSync(repo + '/.git', { recursive: true });
+  const s = newSession();
+  for (const f of files(repo, ['a.js', 'b.js', 'c.js'])) post(s, f, 'Edit', env);
+  assert.strictEqual(JSON.parse(stop(s, false, env)).decision, 'block');
+  assert.strictEqual(stop(s, false, env), '{}');
+});
+test('enabled via globs: blocks once; ENABLED=1 is not needed', () => {
+  const s = newSession();
+  for (const f of files(P.code, ['a.js', 'b.js', 'c.js'])) post(s, f);
+  assert.strictEqual(JSON.parse(stop(s)).decision, 'block');
+  assert.strictEqual(stop(s), '{}');
+});
+test('GUARDRAIL_DOC_MIN_FILES=0 disables the gate (does not fall back to 3); junk values fall back to 3', () => {
+  const s = newSession();
+  for (const f of files(P.code, ['a.js', 'b.js', 'c.js', 'd.js'])) assert.strictEqual(post(s, f, 'Edit', { GUARDRAIL_DOC_MIN_FILES: '0' }), '{}');
+  assert.strictEqual(stop(s, false, { GUARDRAIL_DOC_MIN_FILES: '0' }), '{}');
+  assert.ok(!fs.existsSync(STATE + '/' + s + '.json'));
+  assert.strictEqual(gate.loadConfig({ ...ENV, GUARDRAIL_DOC_MIN_FILES: '0' }).enabled, false);
+  assert.strictEqual(gate.loadConfig({ ...ENV, GUARDRAIL_DOC_MIN_FILES: 'abc' }).minFiles, 3);
+  assert.strictEqual(gate.loadConfig({ ...ENV, GUARDRAIL_DOC_MIN_FILES: '-2' }).minFiles, 3);
 });
