@@ -119,8 +119,10 @@ function nearestMarkerRoot(absDir, cfg) {
 // Returns { root, rel } or null.
 function mapProject(filePath, cwd, cfg = loadConfig()) {
   if (!filePath || typeof filePath !== 'string') return null;
-  let abs = filePath;
-  if (!path.isAbsolute(abs) && !/^[a-z]:[\\/]/i.test(abs)) abs = path.resolve(cwd || process.cwd(), abs);
+  // Hook payloads may carry Windows-style paths even when the hook runs on another OS: normalise the
+  // separators first, so a backslash path is treated as absolute on every platform.
+  let abs = filePath.replace(/\\/g, '/');
+  if (!abs.startsWith('/') && !/^[a-z]:\//i.test(abs)) abs = path.resolve(cwd || process.cwd(), abs);
   const n = norm(abs);
   const low = n.toLowerCase();
   for (const d of cfg.ignore) if (low === d || low.startsWith(d + '/')) return null;
