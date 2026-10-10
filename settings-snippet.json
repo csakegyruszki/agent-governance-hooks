@@ -36,7 +36,7 @@
           },
           {
             "type": "command",
-            "command": "node \"C:/Program Files/Git/ABSOLUTE/PATH/TO/agent-governance-hooks/scripts/return-contract.js\""
+            "command": "node \"/ABSOLUTE/PATH/TO/agent-governance-hooks/scripts/return-contract.js\""
           }
         ]
       },
@@ -58,7 +58,7 @@
           },
           {
             "type": "command",
-            "command": "node \"C:/Program Files/Git/ABSOLUTE/PATH/TO/agent-governance-hooks/scripts/turn-budget.js\""
+            "command": "node \"/ABSOLUTE/PATH/TO/agent-governance-hooks/scripts/turn-budget.js\""
           }
         ]
       },
@@ -67,7 +67,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"C:/Program Files/Git/ABSOLUTE/PATH/TO/agent-governance-hooks/scripts/return-contract.js\""
+            "command": "node \"/ABSOLUTE/PATH/TO/agent-governance-hooks/scripts/return-contract.js\""
           }
         ]
       }
@@ -79,6 +79,10 @@
           {
             "type": "command",
             "command": "node \"/ABSOLUTE/PATH/TO/agent-governance-hooks/scripts/instruction-budget-lint.js\""
+          },
+          {
+            "type": "command",
+            "command": "node \"/ABSOLUTE/PATH/TO/agent-governance-hooks/scripts/doc-touch-gate.js\""
           }
         ]
       },
@@ -87,7 +91,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"C:/Program Files/Git/ABSOLUTE/PATH/TO/agent-governance-hooks/scripts/delegation-log.js\""
+            "command": "node \"/ABSOLUTE/PATH/TO/agent-governance-hooks/scripts/delegation-log.js\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/ABSOLUTE/PATH/TO/agent-governance-hooks/scripts/doc-touch-gate.js\""
           }
         ]
       }
@@ -111,11 +125,11 @@
           },
           {
             "type": "command",
-            "command": "node \"C:/Program Files/Git/ABSOLUTE/PATH/TO/agent-governance-hooks/scripts/return-contract.js\""
+            "command": "node \"/ABSOLUTE/PATH/TO/agent-governance-hooks/scripts/return-contract.js\""
           },
           {
             "type": "command",
-            "command": "node \"C:/Program Files/Git/ABSOLUTE/PATH/TO/agent-governance-hooks/scripts/delegation-log.js\""
+            "command": "node \"/ABSOLUTE/PATH/TO/agent-governance-hooks/scripts/delegation-log.js\""
           }
         ]
       }
