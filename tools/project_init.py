@@ -116,7 +116,8 @@ def init(path, ptype=None, dry_run=False, today=None, config=None):
     today = today or datetime.date.today().isoformat()
     type_source = "arg" if ptype else "path"
     if ptype is None:
-        ptype = detect_type(root.resolve() if root.exists() else root.absolute(), config)
+        # resolve() expands Windows 8.3 short names (RUNNER~1) that the configured globs may still use: try both forms
+        ptype = (detect_type(root.resolve(), config) if root.exists() else None) or detect_type(root.absolute(), config)
     if ptype is None:
         raise ValueError("cannot detect type from path; pass --type (%s)" % "|".join(sorted(config["types"])))
     if ptype not in config["types"]:

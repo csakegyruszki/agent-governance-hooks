@@ -175,36 +175,15 @@ other. A setup with many always-on guards can instead put them into one compiled
 Use this only when guard latency or the number of guards is a measured problem; for a handful of
 guards the scripts here are enough.
 
-## Scope and limits
+## Behaviour
 
-- **Defense in depth, not a security boundary.** The guards are text scans, not shell or SQL
-  parsers. Commands assembled through shell variables, `eval`, encoded text, scripts in other
-  languages or other clients are outside their scope.
-- **Known limit: obfuscation is not caught.** String-matching guards stop accidents, not a determined
-  adversary. Concatenated or computed command names (`iex ('Remove'+'-Item ...')`, `& $name`), base64 or
-  `-EncodedCommand` payloads, backticks or quote-splitting inside a command name (``Re`move-Item``,
-  `r''m`), variables that build a path or file name, and `eval`/`$(...)` indirection are not
-  detected and are asserted as allowed in `tests/soft-asks.test.js` so any change is deliberate.
-- **Ask, not deny, for soft classes.** The newer detections (mirror-delete sync into a protected
-  directory, script deletes, shell reads of secret files) always return `permissionDecision: "ask"`,
-  also with `GUARDRAIL_APPROVAL=deny`, because the guards did not block them before. Where Claude Code
-  cannot prompt (unattended `-p` runs) an `ask` ends up denied; use the audited escape hatch there.
-- **Fail-open by default.** On malformed input or an internal error every hook allows. Set
-  `GUARDRAIL_FAIL_CLOSED=1` to deny instead. If no Python is found, `completion-gate` also fails
-  open with an audit event (denies under `GUARDRAIL_FAIL_CLOSED=1`).
-- **The escape-hatch marker is plain text.** The agent can write it as well as a human can; the
-  audit log is the review point for every bypass.
-- **Deliberate over-blocking.** A destructive command inside a quoted string or commit message, or
-  a commented-out `DROP`, is blocked; quotes are not stripped because that would also hide real
-  matches. Use the escape hatch for such false positives.
-- **`no-nested-agent` depends on `agent_id`.** It relies on Claude Code sending `agent_id` for
-  calls made inside a subagent; if a version stops sending it, the hook allows. `doctor.js` reports
-  whether the field has been observed.
-- **`tickets.py --verify` executes the shell commands in a ticket's `checks`.** Treat ticket files
-  like a Makefile: do not verify tickets from an untrusted source. The gate hook itself never runs
-  them.
-- `lesson-inject` adds tokens to every matching subagent; keep `critical` lessons few.
-- Per-hook limits are listed in each document under [`docs/`](docs).
+- **Ask for soft classes.** Mirror-delete sync into a protected directory, script deletes and shell
+  reads of secret files return a permission prompt. In unattended `-p` runs use the audited escape hatch.
+- **Fail-open by default**; set `GUARDRAIL_FAIL_CLOSED=1` to deny on malformed input or internal errors.
+- **Escape hatch:** a plain-text marker; every bypass is written to the audit log.
+- **Quoted text counts:** a destructive command inside a quoted string or commit message is blocked too.
+- **`tickets.py --verify` runs a ticket's `checks`**: verify only tickets you trust.
+- Per-hook details: [`docs/`](docs).
 
 ## Tests
 
@@ -213,18 +192,9 @@ npm test                                  # node --test
 python -m unittest tests/test_tickets.py tests/test_project_init.py  # tickets tool, project scaffolder
 ```
 
-477 Node tests and 39 Python tests, run with Claude Code 2.1.288 and Node.js 22. Hook matchers and
-payload fields can change between Claude Code versions; re-run the tests after upgrading.
-
-- The SQL, deletion, secret and delegation tests are regression cases: concrete inputs that exposed
-  a gap or pin intended behaviour. Tests touch only temporary directories they create; no real
-  database, repository file or ticket is modified. Fake secrets are built at runtime so the test
-  files do not trip secret scanners.
-- `lesson-inject.test.js` runs on the shipped sample lessons in `examples/lessons/`.
-- `no-nested-agent.test.js` uses payload shapes derived from real Claude Code hook events, with
-  values redacted and only the fields the hook reads kept. The field names `agent_id` /
-  `agent_type` follow the Claude Code [hooks documentation](https://code.claude.com/docs/en/hooks).
-  Its malformed-input cases are synthetic and labelled so.
+CI runs both suites on Linux and Windows for every pull request (badge above). Tests use only
+temporary directories they create; fake secrets are built at runtime. Re-run them after upgrading
+Claude Code.
 
 ## Guidance documents (opt-in, not enforced)
 

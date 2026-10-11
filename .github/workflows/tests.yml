@@ -11,7 +11,11 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,5 +26,7 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-      - name: Run tests
+      - name: Run Node tests
         run: npm test
+      - name: Run Python tests
+        run: python -m unittest tests/test_tickets.py tests/test_project_init.py
